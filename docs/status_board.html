@@ -275,7 +275,7 @@
       <div class="badges">
         <span class="badge">구현·검증 상태판</span>
         <span class="badge">2026-09-28 KST 기준</span>
-        <span class="badge">코드 기준 69bf6da + 배포 스크립트 수정</span>
+        <span class="badge">코드 기준 e064c4a (main)</span>
         <span class="badge warn">PRD 2·3단계 검증 진행 중</span>
       </div>
       <h1>운전 영상 편집기 MVP 상태판</h1>
@@ -288,7 +288,7 @@
 
     <aside class="toc">
       <h2>SimpleEdit 상태판</h2>
-      <p>Go + Wails v2 · Windows 10/11 · 문서 기준 커밋 69bf6da</p>
+      <p>Go + Wails v2 · Windows 10/11 · 코드 기준 커밋 e064c4a</p>
       <nav aria-label="문서 목차">
         <ol>
           <li><a href="#summary">현재 상태 요약</a></li>
@@ -319,12 +319,13 @@
         <div class="grid">
           <div class="callout good"><strong>확정</strong>
             <ul>
-              <li>Go 단위 테스트 19개 통과, 실패 0 (<code>go test ./internal/...</code>)</li>
+              <li>Go 단위 테스트 20개 통과, 실패 0 (<code>go test ./internal/...</code>, 패키지 5개)</li>
               <li>staticcheck (Windows 대상 전체) 경고 0</li>
               <li>모의 백엔드 UI 테스트 36개 항목 × 가로·세로 영상 모두 통과</li>
               <li>Windows 실제 앱에서 10분 1080p 유튜브 영상을 약 30초에 받아 재생·탐색 확인</li>
               <li>Windows에서 저장·취소, 취소 후 프로세스 잔존 0 확인 (devcli)</li>
               <li>배포 zip(182MB)을 Windows 기본 압축 해제로 풀어 실행, bin\ 도구 인식·업데이트·정상 종료 확인</li>
+              <li>GitHub에서 새로 clone한 저장소로 Windows 빌드·단위 테스트 통과 (e064c4a)</li>
             </ul>
           </div>
           <div class="callout warn"><strong>미확정</strong>
@@ -345,7 +346,7 @@
         <h2>2. PRD 기능 진행 (F1–F5 + 추가 요청)</h2>
         <div class="table-scroll">
           <table>
-            <caption>출처: 코드(커밋 69bf6da), devcli 실행 결과, Windows 실제 앱 캡처, 모의 UI 테스트. 관측 시점 2026-09-28 KST.</caption>
+            <caption>출처: 코드(커밋 e064c4a), devcli 실행 결과, Windows 실제 앱 캡처, 모의 UI 테스트. 관측 시점 2026-09-28 KST.</caption>
             <thead><tr><th>ID</th><th>기능</th><th>상태</th><th>구현 요점</th><th>근거</th><th>남은 확인</th></tr></thead>
             <tbody>
               <tr>
@@ -559,15 +560,15 @@
         <h2>6. 코드 맵</h2>
         <div class="table-scroll">
           <table>
-            <caption>경로는 저장소 루트 기준, 줄 번호는 커밋 69bf6da 이후 작업 트리 기준. Go 비테스트 코드 약 2,280줄.</caption>
+            <caption>경로는 저장소 루트 기준, 줄 번호는 커밋 e064c4a 기준. Go 비테스트 코드 약 2,020줄 (cmd 제외).</caption>
             <thead><tr><th>영역</th><th>파일 · 줄</th><th>책임</th></tr></thead>
             <tbody>
               <tr><td>진입점</td><td><a href="../main.go">main.go</a> :17</td><td>Wails 옵션(최대화 시작, 글자 칸 오른쪽 클릭 허용), AssetServer Handler 등록</td></tr>
               <tr><td>바인딩</td><td><a href="../app.go">app.go</a> :134 Download, :176 OpenLocal, :212 load, :242 CloseVideo, :251 OutputFolder, :263 ChooseOutputFolder, :285 Export, :388 serveVideo</td><td>프론트 API, 작업 1개 보장, 진행률 이벤트, 미리보기 서빙</td></tr>
-              <tr><td>오류 문장</td><td><a href="../errors.go">errors.go</a> :17 문구, :49 downloadError, :77 exportError, :91 fileNameError</td><td>원인별 "원인 + 할 일" 한 문장, 원인은 로그로</td></tr>
+              <tr><td>오류 문장</td><td><a href="../errors.go">errors.go</a> :16 문구, :50 downloadError, :78 exportError, :93 toolMissingError, :100 fileNameError</td><td>원인별 "원인 + 할 일" 한 문장, 원인은 로그로</td></tr>
               <tr><td>다운로드</td><td><a href="../internal/download/download.go">download.go</a> :53 Args, :76 Download(403 재시도), :174 parser.line, :235 Classify · <a href="../internal/download/url.go">url.go</a> :17</td><td>yt-dlp 인자, 영상·소리 진행률 합산, 실패 분류, 주소 정규화</td></tr>
               <tr><td>미디어</td><td><a href="../internal/media/filter.go">filter.go</a> :33 ToPixels, :67 MosaicFilter, :104 ExportArgs · <a href="../internal/media/probe.go">probe.go</a> :59 · <a href="../internal/media/run.go">run.go</a> :32</td><td>좌표 변환, 필터 문자열, ffprobe 파싱, ffmpeg 실행·진행률·실패 시 파일 삭제</td></tr>
-              <tr><td>프로세스</td><td><a href="../internal/tools/tools.go">tools.go</a> :69 Command · <a href="../internal/tools/proc_windows.go">proc_windows.go</a> :15 숨김, :27 Job Object, :69 Reveal</td><td>bin\ 경로, 콘솔 창 숨김, 트리 종료, stderr 로그</td></tr>
+              <tr><td>프로세스</td><td><a href="../internal/tools/tools.go">tools.go</a> :69 Command · <a href="../internal/tools/proc_windows.go">proc_windows.go</a> :15 숨김, :27 Job Object, :69 Reveal · <a href="../internal/tools/archive.go">archive.go</a> :10 RunningFromArchive</td><td>bin\ 경로, 콘솔 창 숨김, 트리 종료, stderr 로그, zip 안 실행 감지</td></tr>
               <tr><td>작업 관리</td><td><a href="../internal/job/job.go">job.go</a> :23 Begin, :55 CancelAndWait</td><td>동시 작업 1개, 취소, 종료 대기, ETA·전송 간격</td></tr>
               <tr><td>경로·설정</td><td><a href="../internal/appdir/filename.go">filename.go</a> :32 CleanFileName, :67 OutputPath · <a href="../internal/appdir/settings.go">settings.go</a> :40 · <a href="../internal/appdir/desktop_windows.go">desktop_windows.go</a> :11</td><td>파일 이름 검사, 덮어쓰기 방지, 저장 폴더 기억, OneDrive 바탕화면</td></tr>
               <tr><td>프론트 골격</td><td><a href="../frontend/src/wizard.js">wizard.js</a> :4 · <a href="../frontend/src/state.js">state.js</a> :17 setVideo, :28 resetAll, :39 checkRange · <a href="../frontend/src/api.js">api.js</a></td><td>마법사·이전/다음, 공유 상태, Go 호출 창구</td></tr>
@@ -594,6 +595,7 @@
               <tr><td>외부 도구</td><td>yt-dlp, ffmpeg, ffprobe</td><td>+ deno.exe</td><td>최신 yt-dlp의 YouTube 추출에 JS 런타임 필요</td></tr>
               <tr><td>로컬 영상</td><td>MP4 선택</td><td>mp4·mov·m4v·mkv, H.264 8비트가 아니면 720p 미리보기 변환 (저장은 원본에서)</td><td>휴대폰 HEVC·10비트는 WebView2에서 재생 불가</td></tr>
               <tr><td>배포 zip</td><td>zip 하나 (실행 파일 + bin\)</td><td>같은 구성, 단 <code>python3 -m zipfile</code>로 생성</td><td>Linux <code>zip</code>은 한글 이름을 Windows가 못 읽음 (실측)</td></tr>
+              <tr><td>압축 안 풀고 실행</td><td>-</td><td>도구가 없고 exe가 임시 폴더나 .zip 경로 안이면 "압축을 풀지 않고 실행하셨습니다 … 압축 풀기 후 실행" 안내</td><td>사용자 요청. 탐색기에서 zip 안 exe를 바로 실행하면 bin\ 없이 임시 폴더에서 실행됨</td></tr>
               <tr><td>안정성</td><td>-</td><td>403 재시도, 생방송 분류, 종료 시 정리 대기, 디스크 여유 확인</td><td>테스트·점검 중 발견</td></tr>
             </tbody>
           </table>
@@ -618,6 +620,8 @@
               <tr><td>15:16:51</td><td>첫 커밋 push</td><td><code>69bf6da</code> → origin/main</td><td>-</td></tr>
               <tr><td>16:13</td><td>첫 배포 zip(182MB)을 Windows에서 풀지 못함: "경로에 잘못된 문자"</td><td>PowerShell 5.1 Expand-Archive 오류, zip 항목에 UTF-8 이름 플래그 없음</td><td><code>package.sh</code>를 <code>python3 -m zipfile</code>로 변경, 7개 항목 모두 UTF-8 플래그 확인</td></tr>
               <tr><td>16:15–16:16</td><td>새 zip 압축 해제 → 앱 실행·업데이트·종료, 해당 bin\ 도구로 다운로드·저장 성공</td><td>app.log(<code>도구 폴더: …\ps\운전영상편집기\bin</code>, <code>===== 종료</code>), 창 캡처, devcli 결과</td><td>-</td></tr>
+              <tr><td>16:2x</td><td>zip 안 실행 감지 추가. Windows 실측 중 <code>%TEMP%</code>가 <code>C:\Users\ARTTAT~1\…</code>(8.3 짧은 이름)라 임시 폴더 비교가 항상 실패</td><td>감지 테스트 실행 파일을 Windows 4개 경로에서 실행</td><td><code>GetLongPathName</code>으로 긴 경로로 바꿔 비교. Temp1_…zip·7zO 경로 true, 문서 폴더 false 확인</td></tr>
+              <tr><td>16:2x</td><td><code>.gitignore</code>의 <code>tools/</code>가 <code>internal/tools/</code>까지 제외, 69bf6da·d909c94에 해당 패키지 누락 (새로 받으면 빌드 불가)</td><td><code>git check-ignore</code>, <code>git ls-tree origin/main</code></td><td>규칙을 최상위 기준(<code>/tools/</code> 등)으로 수정, e064c4a에서 추가 후 새 clone 빌드·테스트 통과</td></tr>
             </tbody>
           </table>
         </div>
@@ -639,6 +643,7 @@
               <li>WebView2 CDP를 쓸 수 없어 실제 앱 자동 테스트 수단이 없음</li>
               <li>서명 없는 exe라 인터넷·메신저로 받은 zip이면 첫 실행 때 SmartScreen 경고 가능 (로컬 복사 테스트에서는 미발생, 미검증)</li>
               <li>yt-dlp.exe 백신 오탐 가능성 (미검증)</li>
+              <li>"압축을 풀지 않고 실행하셨습니다" 문구가 실제 화면에 뜨는지는 버튼을 눌러야 해서 미확인 (감지·앱 실행까지만 확인)</li>
             </ul>
           </div>
           <div class="card"><strong>다음 단계</strong>
@@ -660,7 +665,7 @@
             <thead><tr><th>경로 (zip 안)</th><th>크기</th><th>역할</th><th>없으면</th></tr></thead>
             <tbody>
               <tr><td><code>운전영상편집기\운전영상편집기.exe</code></td><td>11MB</td><td>앱 본체, 화면(HTML/JS/CSS) 내장</td><td>-</td></tr>
-              <tr><td><code>bin\yt-dlp.exe</code> + <code>bin\deno.exe</code></td><td>17MB + 93MB</td><td>유튜브 다운로드, YouTube 추출용 JS 런타임</td><td>"프로그램 파일 일부가 없습니다" 안내</td></tr>
+              <tr><td><code>bin\yt-dlp.exe</code> + <code>bin\deno.exe</code></td><td>17MB + 93MB</td><td>유튜브 다운로드, YouTube 추출용 JS 런타임</td><td>"프로그램 파일 일부가 없습니다" 안내 (zip 안에서 바로 실행했으면 "압축을 풀지 않고 실행하셨습니다" 안내)</td></tr>
               <tr><td><code>bin\ffmpeg.exe</code> + <code>bin\ffprobe.exe</code></td><td>157MB + 157MB</td><td>자르기·모자이크·저장, 영상 정보 조회 (정적 빌드, DLL 불필요)</td><td>같은 안내</td></tr>
               <tr><td>(zip에 없음) WebView2 런타임</td><td>-</td><td>화면 표시. Windows 11 기본 포함, Windows 10도 대부분 설치됨</td><td>Wails 기본 설치 안내</td></tr>
               <tr><td>(실행 중 생성) <code>%LOCALAPPDATA%\운전영상편집기\</code></td><td>작업량에 따라</td><td>work(7일 뒤 삭제), logs, settings.json</td><td>-</td></tr>
@@ -678,7 +683,7 @@
             <dt>UPDATE</dt><dd data-command-field="update">없음</dd>
             <dt>DELETE</dt><dd data-command-field="delete">자동: 테스트 임시 폴더. 영속 삭제: 없음</dd>
             <dt>NO CHANGE</dt><dd data-command-field="no-change">저장소 파일, Windows 쪽 파일, %LOCALAPPDATA%, 설정·로그, 원격 저장소</dd>
-            <dt>성공</dt><dd data-command-field="success">모든 패키지 <code>ok</code>, 테스트 함수 19개 PASS. 외부 도구·네트워크를 쓰지 않습니다.</dd>
+            <dt>성공</dt><dd data-command-field="success">모든 패키지 <code>ok</code>, 테스트 함수 20개 PASS. 외부 도구·네트워크를 쓰지 않습니다.</dd>
             <dt>실패</dt><dd data-command-field="failure">잔여물 없음(임시 폴더는 정리됨). <code>FAIL</code> 패키지와 테스트 이름을 확인하고 멈춥니다.</dd>
             <dt>재실행</dt><dd data-command-field="retry">몇 번이든 그대로 다시 실행해도 됩니다. 캐시된 결과는 <code>(cached)</code>로 표시됩니다.</dd>
           </dl>
@@ -720,12 +725,13 @@
         <h2>11. 인수인계와 AI 실행 명세</h2>
         <h3>인수인계 체크리스트</h3>
         <ul class="checklist">
-          <li class="done">PRD F1–F5 구현, main에 push (69bf6da)</li>
+          <li class="done">PRD F1–F5 구현, main에 push (최신 e064c4a, 새 clone 빌드 확인)</li>
           <li class="done">PRD 1단계 기술 검증 4개 항목 통과</li>
           <li class="done">두 차례 코드 점검(죽은 코드·논리 오류) 반영, staticcheck·주석 규칙 위반 0</li>
           <li>최근 수정 사항을 실제 Windows 앱에서 사용자가 확인</li>
           <li class="done"><code>scripts/package.sh</code>로 zip을 만들고 개발 PC의 새 폴더에 풀어 실행 확인</li>
           <li>zip을 다른 PC(강사님 PC 또는 새 계정)에서 풀어 실행, SmartScreen·백신 반응 확인</li>
+          <li>zip 안의 exe를 바로 더블클릭 → "영상 받기"로 압축 풀기 안내 문구 화면 확인</li>
           <li>PRD 2단계 미검증 4개 항목</li>
           <li>강사님 사용성 테스트 2회 연속 성공</li>
         </ul>
@@ -746,7 +752,7 @@
 이미 증명된 것:
   - F1–F5 구현, PRD 1단계 기술 검증 4개 통과(WSL·Windows)
   - Windows 앱에서 다운로드·미리보기·탐색 동작
-  - go test ./internal/... 19개 통과, staticcheck(GOOS=windows) 경고 0
+  - go test ./internal/... 20개 통과, staticcheck(GOOS=windows) 경고 0
   - 모의 백엔드 UI 테스트 36개 항목 통과(가로·세로)
 먼저 확인:
   1) git log로 최신 커밋, git status로 작업 트리 상태
@@ -777,7 +783,7 @@
         <h2>12. 참고와 증거 한계</h2>
         <ul>
           <li>요구사항: <a href="PRD.md">docs/PRD.md</a></li>
-          <li>코드 기준: 커밋 <code>69bf6da</code>(origin/main)와 그 뒤 <code>scripts/package.sh</code> zip 생성 방식 수정. 이 문서는 그 수정과 함께 커밋됩니다.</li>
+          <li>코드 기준: 커밋 <code>e064c4a</code>(origin/main). 69bf6da·d909c94는 <code>internal/tools</code>가 빠져 있어 단독으로는 빌드되지 않습니다.</li>
           <li>Windows 관측은 개발자 PC(1920×1080, 150% 배율, WebView2 153.0.4234.48) 한 대에서만 했습니다. 강사님 PC 환경은 확인하지 않았습니다.</li>
           <li>모의 UI 테스트는 Linux 헤드리스 Chromium에서 VP9/WebM 테스트 영상으로 했습니다. H.264 재생과 WebView2 고유 동작은 검증 범위 밖입니다.</li>
           <li>"사용자 직접 테스트 소감"은 세부 항목 기록 없이 전달된 의견입니다.</li>
