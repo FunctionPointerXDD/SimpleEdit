@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"sort"
 	"testing"
+
+	"simpleEdit/internal/frame"
 )
 
 // 대조 테스트용 런타임·모델 경로 (없으면 건너뜀)
@@ -91,7 +93,7 @@ func defaultORTLib() string {
 	return filepath.Join(dir, "linux", "libonnxruntime.so.1.29.0")
 }
 
-func readPNG(t *testing.T, path string) Frame {
+func readPNG(t *testing.T, path string) frame.Frame {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
@@ -102,7 +104,7 @@ func readPNG(t *testing.T, path string) Frame {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return FrameFromImage(img)
+	return frame.FromImage(img)
 }
 
 func sortBoxes(b []Box) {

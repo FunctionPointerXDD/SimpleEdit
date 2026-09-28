@@ -3,10 +3,12 @@ package detect
 import (
 	"math"
 	"testing"
+
+	"simpleEdit/internal/frame"
 )
 
 func TestLetterboxCopyAndPad(t *testing.T) {
-	f := Frame{W: 2, H: 1, Pix: []byte{1, 2, 3, 4, 5, 6}}
+	f := frame.Frame{W: 2, H: 1, Pix: []byte{1, 2, 3, 4, 5, 6}}
 	dst := make([]float32, 3*4*4)
 	if s := Letterbox(f, 4, 114, dst); s != 1 {
 		t.Fatalf("scale = %v", s)
@@ -25,7 +27,7 @@ func TestLetterboxCopyAndPad(t *testing.T) {
 }
 
 func TestLetterboxDownscale(t *testing.T) {
-	f := Frame{W: 8, H: 4, Pix: make([]byte, 8*4*3)}
+	f := frame.Frame{W: 8, H: 4, Pix: make([]byte, 8*4*3)}
 	for i := range f.Pix {
 		f.Pix[i] = 200
 	}

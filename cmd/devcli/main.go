@@ -48,6 +48,9 @@ func main() {
 	case "export":
 		need(6)
 		err = export(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]), os.Args[6:])
+	case "pipe":
+		need(6)
+		err = exportPipe(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]), os.Args[6:])
 	case "cancel":
 		need(5)
 		c, cancel := context.WithTimeout(ctx, time.Duration(num(os.Args[4])*float64(time.Second)))
@@ -78,15 +81,10 @@ func export(ctx context.Context, src, out string, start, end float64, rectArgs [
 	if err != nil {
 		return err
 	}
-	var rects []media.Rect
-	for _, a := range rectArgs {
-		f := strings.Split(a, ",")
-		if len(f) != 4 {
-			return fmt.Errorf("사각형 형식은 x,y,w,h: %q", a)
-		}
-		rects = append(rects, media.Rect{X: num(f[0]), Y: num(f[1]), W: num(f[2]), H: num(f[3])})
+	px, err := parseRects(rectArgs, info)
+	if err != nil {
+		return err
 	}
-	px := media.RectsToPixels(rects, info.Width, info.Height)
 	fmt.Printf("원본 %dx%d, 사각형 %v\n", info.Width, info.Height, px)
 	t0 := time.Now()
 	err = media.Export(ctx, media.ExportSpec{
@@ -97,6 +95,38 @@ func export(ctx context.Context, src, out string, start, end float64, rectArgs [
 		fmt.Printf("완료 %s (%.1f초)\n", out, time.Since(t0).Seconds())
 	}
 	return err
+}
+
+func exportPipe(ctx context.Context, src, out string, start, end float64, rectArgs []string) error {
+	info, err := media.Probe(ctx, src)
+	if err != nil {
+		return err
+	}
+	px, err := parseRects(rectArgs, info)
+	if err != nil {
+		return err
+	}
+	spec := media.PipeSpec{Source: src, Start: start, Duration: end - start, FPS: info.FPS, Width: info.Width, Height: info.Height}
+	fmt.Printf("원본 %dx%d %.3ffps, 사각형 %v\n", info.Width, info.Height, info.FPS, px)
+	t0 := time.Now()
+	err = media.ProcessFrames(ctx, spec, out, media.PixelateRects(px), func(f float64) { fmt.Printf("\r파이프 %5.1f%%   ", f*100) })
+	fmt.Println()
+	if err == nil {
+		fmt.Printf("완료 %s (%.1f초)\n", out, time.Since(t0).Seconds())
+	}
+	return err
+}
+
+func parseRects(args []string, info media.Info) ([]media.PixelRect, error) {
+	var rects []media.Rect
+	for _, a := range args {
+		f := strings.Split(a, ",")
+		if len(f) != 4 {
+			return nil, fmt.Errorf("사각형 형식은 x,y,w,h: %q", a)
+		}
+		rects = append(rects, media.Rect{X: num(f[0]), Y: num(f[1]), W: num(f[2]), H: num(f[3])})
+	}
+	return media.RectsToPixels(rects, info.Width, info.Height), nil
 }
 
 func num(s string) float64 {
@@ -118,6 +148,7 @@ func usage() {
   devcli download <URL> <작업폴더> [취소초]
   devcli probe <파일>
   devcli export <원본> <출력> <시작초> <끝초> [x,y,w,h ...]
+  devcli pipe <원본> <출력> <시작초> <끝초> [x,y,w,h ...]
   devcli cancel <원본> <출력> <초>
   devcli update`)
 	os.Exit(2)

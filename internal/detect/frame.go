@@ -2,15 +2,10 @@
 package detect
 
 import (
-	"image"
 	"math"
-)
 
-// Frame은 bgr24 한 장이다. len(Pix) = W*H*3
-type Frame struct {
-	W, H int
-	Pix  []byte
-}
+	"simpleEdit/internal/frame"
+)
 
 // Box는 원본 프레임 픽셀 기준 검출 결과다.
 type Box struct {
@@ -18,23 +13,8 @@ type Box struct {
 	Score      float32
 }
 
-// FrameFromImage는 image.Image를 bgr24 Frame으로 바꾼다.
-func FrameFromImage(img image.Image) Frame {
-	b := img.Bounds()
-	f := Frame{W: b.Dx(), H: b.Dy(), Pix: make([]byte, b.Dx()*b.Dy()*3)}
-	i := 0
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			r, g, bl, _ := img.At(x, y).RGBA()
-			f.Pix[i], f.Pix[i+1], f.Pix[i+2] = byte(bl>>8), byte(g>>8), byte(r>>8)
-			i += 3
-		}
-	}
-	return f
-}
-
 // Letterbox는 왼쪽 위 정렬·pad 채움 CHW(BGR)를 만든다.
-func Letterbox(f Frame, size int, pad float32, dst []float32) (scale float32) {
+func Letterbox(f frame.Frame, size int, pad float32, dst []float32) (scale float32) {
 	scale = min(1, float32(size)/float32(max(f.W, f.H)))
 	nw := int(math.Round(float64(float32(f.W) * scale)))
 	nh := int(math.Round(float64(float32(f.H) * scale)))
@@ -51,7 +31,7 @@ func Letterbox(f Frame, size int, pad float32, dst []float32) (scale float32) {
 }
 
 // copyPlanes는 크기 변경 없이 채널별로 옮긴다.
-func copyPlanes(f Frame, size int, dst []float32) {
+func copyPlanes(f frame.Frame, size int, dst []float32) {
 	plane := size * size
 	for y := 0; y < f.H; y++ {
 		row := f.Pix[y*f.W*3:]
@@ -65,7 +45,7 @@ func copyPlanes(f Frame, size int, dst []float32) {
 }
 
 // resizeBilinear는 INTER_LINEAR식 픽셀 중심 보간이다.
-func resizeBilinear(f Frame, nw, nh, size int, dst []float32) {
+func resizeBilinear(f frame.Frame, nw, nh, size int, dst []float32) {
 	plane := size * size
 	sx := float32(f.W) / float32(nw)
 	sy := float32(f.H) / float32(nh)

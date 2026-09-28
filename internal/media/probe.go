@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"simpleEdit/internal/tools"
 )
@@ -20,6 +21,7 @@ type Info struct {
 	PixFmt     string
 	HasAudio   bool
 	BitRate    int64 // bps, 모르면 0
+	FPS        float64
 }
 
 type probeJSON struct {
@@ -29,6 +31,8 @@ type probeJSON struct {
 		Width     int               `json:"width"`
 		Height    int               `json:"height"`
 		PixFmt    string            `json:"pix_fmt"`
+		AvgRate   string            `json:"avg_frame_rate"`
+		RealRate  string            `json:"r_frame_rate"`
 		Duration  string            `json:"duration"`
 		Tags      map[string]string `json:"tags"`
 		SideData  []struct {
@@ -72,6 +76,7 @@ func ParseProbe(data []byte) (Info, error) {
 			foundVideo = true
 			info.VideoCodec = s.CodecName
 			info.PixFmt = s.PixFmt
+			info.FPS = pickFPS(s.AvgRate, s.RealRate)
 			info.Width, info.Height = s.Width, s.Height
 			if isQuarterTurn(rotation(s.Tags, s.SideData)) {
 				info.Width, info.Height = info.Height, info.Width
@@ -108,6 +113,37 @@ func rotation(tags map[string]string, side []struct {
 		return r
 	}
 	return 0
+}
+
+// 고정 fps 변환에 쓸 기본값과 상한
+const (
+	defaultFPS = 30
+	maxFPS     = 60
+)
+
+// pickFPS는 평균 fps를 우선하고 이상하면 기본값을 쓴다.
+func pickFPS(rates ...string) float64 {
+	for _, r := range rates {
+		if v := parseRate(r); v >= 1 && v <= 240 {
+			return min(v, maxFPS)
+		}
+	}
+	return defaultFPS
+}
+
+// parseRate는 "30000/1001" 같은 분수를 푼다.
+func parseRate(s string) float64 {
+	num, den, ok := strings.Cut(s, "/")
+	if !ok {
+		v, _ := strconv.ParseFloat(s, 64)
+		return v
+	}
+	n, err1 := strconv.ParseFloat(num, 64)
+	d, err2 := strconv.ParseFloat(den, 64)
+	if err1 != nil || err2 != nil || d == 0 {
+		return 0
+	}
+	return n / d
 }
 
 func isQuarterTurn(deg float64) bool {

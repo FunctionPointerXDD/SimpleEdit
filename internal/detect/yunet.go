@@ -6,6 +6,8 @@ import (
 	"math"
 
 	ort "github.com/yalue/onnxruntime_go"
+
+	"simpleEdit/internal/frame"
 )
 
 // YuNet 2023mar 모델의 고정 입력 크기
@@ -70,7 +72,7 @@ func yunetChannels(kind string) int64 {
 }
 
 // Detect는 프레임에서 얼굴 박스를 원본 좌표로 돌려준다.
-func (d *FaceDetector) Detect(f Frame) ([]Box, error) {
+func (d *FaceDetector) Detect(f frame.Frame) ([]Box, error) {
 	if d.sess == nil {
 		return nil, errors.New("닫힌 검출기")
 	}
