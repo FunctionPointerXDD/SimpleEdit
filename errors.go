@@ -24,6 +24,7 @@ const (
 	msgBlocked      = "유튜브가 잠시 다운로드를 막았습니다. 몇 분 뒤에 다시 눌러 주세요."
 	msgNoSpace      = "컴퓨터 저장 공간이 부족합니다. 필요 없는 파일을 지운 뒤 다시 눌러 주세요."
 	msgToolMissing  = "프로그램 파일 일부가 없습니다. 프로그램 폴더를 처음 받은 그대로 다시 풀어 주세요."
+	msgNotExtracted = "압축을 풀지 않고 실행하셨습니다. zip 파일을 마우스 오른쪽 버튼으로 눌러 \"압축 풀기\"를 한 뒤, 풀린 폴더의 운전영상편집기.exe를 실행해 주세요."
 	msgDownloadFail = "영상을 받지 못했습니다. 잠시 뒤 다시 눌러 주세요."
 	msgOpenFail     = "이 파일은 열 수 없습니다. 다른 동영상 파일을 골라 주세요."
 	msgNoVideo      = "먼저 영상을 불러와 주세요."
@@ -51,7 +52,7 @@ func downloadError(err error) error {
 	case errors.Is(err, context.Canceled):
 		return userError(msgCanceled, err)
 	case errors.Is(err, tools.ErrMissing):
-		return userError(msgToolMissing, err)
+		return toolMissingError(err)
 	case errors.Is(err, job.ErrBusy):
 		return userError(msgBusy, err)
 	case errors.Is(err, download.ErrBadURL):
@@ -79,13 +80,21 @@ func exportError(err error) error {
 	case errors.Is(err, context.Canceled):
 		return userError(msgCanceled, err)
 	case errors.Is(err, tools.ErrMissing):
-		return userError(msgToolMissing, err)
+		return toolMissingError(err)
 	case errors.Is(err, job.ErrBusy):
 		return userError(msgBusy, err)
 	case errors.Is(err, media.ErrNoSpace):
 		return userError(msgNoSpace, err)
 	}
 	return userError(msgExportFail, err)
+}
+
+// toolMissingError는 zip 안 실행이면 압축 풀기를 안내한다.
+func toolMissingError(err error) error {
+	if tools.RunningFromArchive() {
+		return userError(msgNotExtracted, err)
+	}
+	return userError(msgToolMissing, err)
 }
 
 func fileNameError(err error) error {
