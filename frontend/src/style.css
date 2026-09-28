@@ -247,8 +247,15 @@ b { color: var(--primary-dark); }
 .mark-card .link { min-height: 28px; padding: 0; }
 
 /* ── 3단계: 가릴 곳 목록 ──────────────────────── */
-.side { width: 250px; flex-shrink: 0; overflow: auto; }
+.side { width: 280px; flex-shrink: 0; overflow: auto; }
 .side .hint { color: var(--muted); font-size: 18px; margin: 0 0 12px; }
+.auto-panel { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--line); }
+.auto-panel h2 { margin: 0; }
+.btn.auto-btn { width: 100%; white-space: normal; min-height: 64px; }
+.btn.auto-toggle { width: 100%; }
+.auto-status { margin: 0; font-size: 18px; color: var(--muted); }
+.auto-panel .progress { margin-top: 0; }
+.auto-panel .progress-row { flex-wrap: wrap; gap: 8px 16px; }
 .rect-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .rect-list li { display: flex; align-items: center; gap: 10px; font-size: 20px; }
 .rect-list li .btn { margin-left: auto; }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 외부 도구를 tools/<windows|linux|ml>/에 내려받는다.
+# 외부 도구를 tools/<windows|linux|ml|vcrt>/에 받는다.
 set -euo pipefail
 
 target="${1:-windows}"
@@ -66,10 +66,21 @@ ml)
   fetch_checked https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx \
     "$root/tools/models/face_yunet_2023mar.onnx" \
     8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
+  ln -sfn ../models "$root/tools/linux/models"
   out="$root/tools/models"
   ;;
+vcrt)
+  # onnxruntime.dll이 쓰는 VC++ 런타임. WSL에서 Windows 설치본을 복사
+  sys32=/mnt/c/Windows/System32
+  mkdir -p "$root/tools/windows"
+  for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do
+    [ -f "$sys32/$f" ] || { echo "$sys32/$f 없음: VC++ 재배포 패키지(x64)를 먼저 설치" >&2; exit 1; }
+    cp "$sys32/$f" "$root/tools/windows/$f"
+  done
+  out="$root/tools/windows"
+  ;;
 *)
-  echo "사용법: $0 windows|linux|ml" >&2; exit 1 ;;
+  echo "사용법: $0 windows|linux|ml|vcrt" >&2; exit 1 ;;
 esac
 
 ls -lh "$out"

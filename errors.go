@@ -6,6 +6,7 @@ import (
 
 	"simpleEdit/internal/appdir"
 	"simpleEdit/internal/applog"
+	"simpleEdit/internal/detect"
 	"simpleEdit/internal/download"
 	"simpleEdit/internal/job"
 	"simpleEdit/internal/media"
@@ -37,6 +38,9 @@ const (
 	msgNameBadChar  = "파일 이름에 쓸 수 없는 글자(\\ / : * ? \" < > |)가 있습니다. 지우고 다시 눌러 주세요."
 	msgNameReserved = "이 이름은 Windows에서 쓸 수 없습니다. 다른 이름을 적어 주세요."
 	msgNameTooLong  = "파일 이름이 너무 깁니다. 100글자 안으로 줄여 주세요."
+	msgAnalyzeFail  = "자동으로 찾는 중 문제가 생겼습니다. 다시 눌러 주세요."
+	msgRuntimeMiss  = "얼굴 찾기에 필요한 Windows 구성 요소(Visual C++ 재배포 가능 패키지)가 없습니다. 설치한 뒤 다시 눌러 주세요."
+	msgAutoStale    = "자른 구간이 바뀌어 자동 가리기를 다시 해야 합니다. 3단계에서 \"사람 얼굴 가리기\"를 다시 눌러 주세요."
 )
 
 // userError는 원인을 로그에 남기고 안내 문장을 돌려준다.
@@ -87,6 +91,20 @@ func exportError(err error) error {
 		return userError(msgNoSpace, err)
 	}
 	return userError(msgExportFail, err)
+}
+
+func analyzeError(err error) error {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return userError(msgCanceled, err)
+	case errors.Is(err, tools.ErrMissing):
+		return toolMissingError(err)
+	case errors.Is(err, detect.ErrRuntime):
+		return userError(msgRuntimeMiss, err)
+	case errors.Is(err, job.ErrBusy):
+		return userError(msgBusy, err)
+	}
+	return userError(msgAnalyzeFail, err)
 }
 
 // toolMissingError는 zip 안 실행이면 압축 풀기를 안내한다.

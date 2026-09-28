@@ -2,7 +2,7 @@ import {h} from '../ui/dom.js';
 import {createPlayer} from '../ui/player.js';
 import {createGuide} from '../ui/message.js';
 import {openVideo} from '../media/videoSource.js';
-import {state, checkRange} from '../state.js';
+import {state, checkRange, setRange} from '../state.js';
 import {formatClock, formatLength, roundTenth} from '../util/time.js';
 
 // 2단계: "여기서 시작"/"여기서 끝"으로 구간 정하기
@@ -21,11 +21,11 @@ export const trimStep = {
         player.marks.append(selection);
 
         const setStart = () => {
-            state.start = roundTenth(player.currentTime);
+            setRange(roundTenth(player.currentTime), state.end);
             update(true);
         };
         const setEnd = () => {
-            state.end = roundTenth(player.currentTime);
+            setRange(state.start, roundTenth(player.currentTime));
             update(true);
         };
 

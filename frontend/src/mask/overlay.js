@@ -16,13 +16,14 @@ function contentBox(video) {
     return {x: (ew - w) / 2, y: (eh - h) / 2, w, h};
 }
 
-// 영상 위에 끌어서 그린 사각형을 0~1 비율로 넘긴다.
-export function createMaskOverlay({video, getRects, canAdd, onAdd, onBlocked, onStart}) {
+// 끌어 그린 사각형(비율)과 자동 박스(주황)를 그린다.
+export function createMaskOverlay({video, getRects, getAuto, canAdd, onAdd, onBlocked, onStart}) {
     const off = new AbortController();
     const on = (target, type, fn) => target.addEventListener(type, fn, {signal: off.signal});
     const canvas = h('canvas.mask-canvas');
     const ctx2d = canvas.getContext('2d');
     let drag = null;
+    let raf = 0;
 
     function pointIn(ev) {
         const r = canvas.getBoundingClientRect();
@@ -65,6 +66,13 @@ export function createMaskOverlay({video, getRects, canAdd, onAdd, onBlocked, on
         const box = contentBox(video);
         const toPx = (r) => [box.x + r.x * box.w, box.y + r.y * box.h, r.w * box.w, r.h * box.h];
 
+        for (const r of getAuto?.(video.currentTime) || []) {
+            const [x, y, w, hh] = toPx(r);
+            drawMosaicHint(x, y, w, hh);
+            ctx2d.lineWidth = 3;
+            ctx2d.strokeStyle = '#ff9500';
+            ctx2d.strokeRect(x, y, w, hh);
+        }
         getRects().forEach((r, i) => {
             const [x, y, w, hh] = toPx(r);
             drawMosaicHint(x, y, w, hh);
@@ -134,6 +142,16 @@ export function createMaskOverlay({video, getRects, canAdd, onAdd, onBlocked, on
     on(canvas, 'pointerup', finish);
     on(canvas, 'pointercancel', finish);
     on(video, 'loadedmetadata', draw);
+    on(video, 'seeked', draw);
+    on(video, 'timeupdate', draw);
+    on(video, 'play', () => {
+        if (!raf) raf = requestAnimationFrame(tick);
+    });
+
+    function tick() {
+        draw();
+        raf = video.paused ? 0 : requestAnimationFrame(tick);
+    }
 
     const ro = new ResizeObserver(draw);
     ro.observe(canvas);
@@ -143,6 +161,7 @@ export function createMaskOverlay({video, getRects, canAdd, onAdd, onBlocked, on
         redraw: draw,
         destroy() {
             off.abort();
+            cancelAnimationFrame(raf);
             ro.disconnect();
         },
     };

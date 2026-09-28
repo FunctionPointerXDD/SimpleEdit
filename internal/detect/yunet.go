@@ -13,6 +13,9 @@ import (
 // YuNet 2023mar 모델의 고정 입력 크기
 const yunetSize = 640
 
+// DefaultFaceScore는 놓치지 않게 낮춘 점수 기준이다.
+const DefaultFaceScore = 0.4
+
 // YuNet 출력의 stride 단계
 var yunetStrides = [3]int{8, 16, 32}
 
@@ -37,7 +40,7 @@ func NewFaceDetector(modelPath string) (*FaceDetector, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &FaceDetector{ScoreThreshold: 0.5, NMSThreshold: 0.3, input: in}
+	d := &FaceDetector{ScoreThreshold: DefaultFaceScore, NMSThreshold: 0.3, input: in}
 	var names []string
 	var outs []ort.Value
 	for _, kind := range []string{"cls", "obj", "bbox", "kps"} {

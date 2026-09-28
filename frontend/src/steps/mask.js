@@ -3,15 +3,16 @@ import {createPlayer} from '../ui/player.js';
 import {createGuide} from '../ui/message.js';
 import {createMaskOverlay} from '../mask/overlay.js';
 import {openVideo} from '../media/videoSource.js';
-import {state, MAX_RECTS} from '../state.js';
+import {createAutoPanel} from '../mask/autoPanel.js';
+import {state, MAX_RECTS, autoRectsAt} from '../state.js';
 
-// 3단계: 끌어서 가릴 곳 지정 (최대 5개, 생략 가능)
+// 3단계: 자동 가리기 + 끌어서 직접 가릴 곳 지정
 export const maskStep = {
     title: '가릴 곳 정하기',
     mount(root, ctx) {
         const v = state.video;
-        const guide = createGuide('번호판·얼굴을 ', h('b', {}, '마우스로 끌어서'),
-            ' 네모로 그리세요. 가릴 곳이 없으면 ', h('b', {}, '"다음"'), '을 누르세요.');
+        const guide = createGuide(h('b', {}, '"사람 얼굴 가리기"'), '를 누르거나 ', h('b', {}, '마우스로 끌어서'),
+            ' 네모로 가리세요. 가릴 곳이 없으면 ', h('b', {}, '"다음"'), '을 누르세요.');
         const list = h('ol.rect-list');
 
         const player = createPlayer({
@@ -20,6 +21,7 @@ export const maskStep = {
         const overlay = createMaskOverlay({
             video: player.video,
             getRects: () => state.rects,
+            getAuto: autoRectsAt,
             canAdd: () => state.rects.length < MAX_RECTS,
             onStart: () => player.pause(),
             onAdd: (r) => {
@@ -31,12 +33,14 @@ export const maskStep = {
         });
         player.video.parentElement.append(overlay.el);
         player.seek(state.start);
+        const auto = createAutoPanel({ctx, guide, player, onChange: () => overlay.redraw()});
 
         root.append(
             h('section.panel.editor.with-side', {},
                 h('div.editor-main', {}, guide.el, player.el),
                 h('aside.side', {},
-                    h('h2', {}, '가릴 곳'),
+                    auto.el,
+                    h('h2', {}, '직접 가릴 곳'),
                     h('p.hint', {}, `최대 ${MAX_RECTS}개. 자른 구간 내내 같은 자리가 가려집니다.`),
                     list,
                 ),
@@ -67,6 +71,7 @@ export const maskStep = {
         ctx.setNextEnabled(true);
         return {
             unmount() {
+                auto.unmount();
                 overlay.destroy();
                 overlay.el.remove();
                 player.destroy();

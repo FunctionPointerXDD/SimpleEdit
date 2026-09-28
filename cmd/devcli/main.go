@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -10,8 +11,11 @@ import (
 	"time"
 
 	"simpleEdit/internal/applog"
+	"simpleEdit/internal/automask"
+	"simpleEdit/internal/detect"
 	"simpleEdit/internal/download"
 	"simpleEdit/internal/media"
+	"simpleEdit/internal/tools"
 )
 
 func main() {
@@ -51,6 +55,9 @@ func main() {
 	case "pipe":
 		need(6)
 		err = exportPipe(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]), os.Args[6:])
+	case "analyze":
+		need(6)
+		err = analyze(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]))
 	case "cancel":
 		need(5)
 		c, cancel := context.WithTimeout(ctx, time.Duration(num(os.Args[4])*float64(time.Second)))
@@ -117,6 +124,46 @@ func exportPipe(ctx context.Context, src, out string, start, end float64, rectAr
 	return err
 }
 
+func analyze(ctx context.Context, src, out string, start, end float64) error {
+	info, err := media.Probe(ctx, src)
+	if err != nil {
+		return err
+	}
+	if err := detect.Init(tools.ORTLib()); err != nil {
+		return err
+	}
+	det, err := detect.NewFaceDetector(tools.ModelPath(tools.FaceModel))
+	if err != nil {
+		return err
+	}
+	defer det.Close()
+	spec := media.PipeSpec{Source: src, Start: start, Duration: end - start, FPS: info.FPS, Width: info.Width, Height: info.Height}
+	t0 := time.Now()
+	res, err := automask.Analyze(ctx, spec, det, automask.OptionsFor(info.FPS), func(f float64) { fmt.Printf("\r분석 %5.1f%%   ", f*100) })
+	fmt.Println()
+	if err != nil {
+		return err
+	}
+	covered := 0
+	for _, fr := range res.Frames {
+		if len(fr) > 0 {
+			covered++
+		}
+	}
+	fmt.Printf("분석 %.1f초: 프레임 %d개, 검출 %d건, 박스 있는 프레임 %d개\n", time.Since(t0).Seconds(), len(res.Frames), res.Found, covered)
+	data, _ := json.Marshal(res)
+	if err := os.WriteFile(out+".json", data, 0o644); err != nil {
+		return err
+	}
+	t1 := time.Now()
+	err = media.ProcessFrames(ctx, spec, out, automask.PixelateFunc(nil, res.Frames), func(f float64) { fmt.Printf("\r저장 %5.1f%%   ", f*100) })
+	fmt.Println()
+	if err == nil {
+		fmt.Printf("저장 %.1f초: %s\n", time.Since(t1).Seconds(), out)
+	}
+	return err
+}
+
 func parseRects(args []string, info media.Info) ([]media.PixelRect, error) {
 	var rects []media.Rect
 	for _, a := range args {
@@ -149,6 +196,7 @@ func usage() {
   devcli probe <파일>
   devcli export <원본> <출력> <시작초> <끝초> [x,y,w,h ...]
   devcli pipe <원본> <출력> <시작초> <끝초> [x,y,w,h ...]
+  devcli analyze <원본> <출력> <시작초> <끝초>
   devcli cancel <원본> <출력> <초>
   devcli update`)
 	os.Exit(2)

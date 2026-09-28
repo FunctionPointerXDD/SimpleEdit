@@ -1,10 +1,49 @@
 export namespace main {
 	
+	export class AnalyzeRequest {
+	    kind: string;
+	    start: number;
+	    end: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AnalyzeRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.start = source["start"];
+	        this.end = source["end"];
+	    }
+	}
+	export class AutoMask {
+	    kind: string;
+	    start: number;
+	    duration: number;
+	    fps: number;
+	    found: number;
+	    frames: number[][][];
+	
+	    static createFrom(source: any = {}) {
+	        return new AutoMask(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.start = source["start"];
+	        this.duration = source["duration"];
+	        this.fps = source["fps"];
+	        this.found = source["found"];
+	        this.frames = source["frames"];
+	    }
+	}
 	export class ExportRequest {
 	    start: number;
 	    end: number;
 	    rects: media.Rect[];
 	    fileName: string;
+	    auto: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ExportRequest(source);
@@ -16,6 +55,7 @@ export namespace main {
 	        this.end = source["end"];
 	        this.rects = this.convertValues(source["rects"], media.Rect);
 	        this.fileName = source["fileName"];
+	        this.auto = source["auto"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

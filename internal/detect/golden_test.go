@@ -81,6 +81,7 @@ func openFaceDetector(t *testing.T) *FaceDetector {
 	if err != nil {
 		t.Fatal(err)
 	}
+	det.ScoreThreshold = 0.5
 	t.Cleanup(det.Close)
 	return det
 }

@@ -2,7 +2,7 @@ import {h} from '../ui/dom.js';
 import {createMessage} from '../ui/message.js';
 import {createProgress} from '../ui/progress.js';
 import * as api from '../api.js';
-import {state, resetAll} from '../state.js';
+import {state, resetAll, enabledAuto} from '../state.js';
 import {formatClock, formatLength} from '../util/time.js';
 
 const STAGE_TEXT = {export: '영상을 저장하는 중입니다…'};
@@ -30,7 +30,8 @@ export const saveStep = {
                 h('h1', {}, '영상을 저장합니다'),
                 h('dl.summary', {},
                     h('dt', {}, '자른 구간'), h('dd', {}, `${formatClock(state.start)} ~ ${formatClock(state.end)} (${formatLength(len)})`),
-                    h('dt', {}, '가린 곳'), h('dd', {}, state.rects.length ? `${state.rects.length}곳` : '없음'),
+                    h('dt', {}, '자동 가림'), h('dd', {}, enabledAuto().length ? '사람 얼굴' : '없음'),
+                    h('dt', {}, '직접 가린 곳'), h('dd', {}, state.rects.length ? `${state.rects.length}곳` : '없음'),
                     h('dt', {}, '파일 이름'), h('dd.name-row', {}, nameInput, h('span.ext', {}, '.mp4')),
                     h('dt', {}, '저장 위치'), h('dd.folder-row', {}, folderText, folderBtn),
                 ),
@@ -71,6 +72,7 @@ export const saveStep = {
             try {
                 state.savedPath = await api.exportVideo({
                     start: state.start, end: state.end, rects: state.rects, fileName: state.fileName,
+                    auto: enabledAuto(),
                 });
                 showDone();
             } catch (e) {

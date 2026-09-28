@@ -5,6 +5,7 @@ import {EventsOn} from '../wailsjs/runtime/runtime.js';
 export const download = (url) => App.Download(url);
 export const openLocal = () => App.OpenLocal();
 export const closeVideo = () => App.CloseVideo();
+export const analyze = (req) => App.Analyze(req);
 export const exportVideo = (req) => App.Export(req);
 export const cancel = () => App.Cancel();
 export const outputFolder = () => App.OutputFolder();
@@ -12,7 +13,7 @@ export const defaultFileName = () => App.DefaultFileName();
 export const chooseOutputFolder = () => App.ChooseOutputFolder();
 export const openOutputFolder = () => App.OpenOutputFolder();
 
-// kind: 'download' | 'export'. 반환 함수로 해제
+// kind: download·export·analyze. 반환 함수로 해제
 export function onProgress(kind, cb) {
     return EventsOn(`${kind}:progress`, cb);
 }

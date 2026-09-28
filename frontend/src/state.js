@@ -6,6 +6,7 @@ export const state = {
     start: 0,
     end: 0,
     rects: [],
+    auto: {},
     fileName: '',
     savedPath: '',
 };
@@ -20,6 +21,7 @@ export function setVideo(video) {
     state.start = 0;
     state.end = Math.floor(video.duration * 10) / 10;
     state.rects = [];
+    state.auto = {};
     state.fileName = '';
     state.savedPath = '';
 }
@@ -31,8 +33,33 @@ export function resetAll() {
     state.start = 0;
     state.end = 0;
     state.rects = [];
+    state.auto = {};
     state.fileName = '';
     state.savedPath = '';
+}
+
+// 구간이 바뀌면 자동 가림 결과를 버린다.
+export function setRange(start, end) {
+    if (start !== state.start || end !== state.end) state.auto = {};
+    state.start = start;
+    state.end = end;
+}
+
+// 켜진 자동 가림 종류 목록
+export function enabledAuto() {
+    return Object.keys(state.auto).filter((k) => state.auto[k].enabled);
+}
+
+// 시각 t 화면 프레임(내림)의 자동 박스 [x,y,w,h]들
+export function autoRectsAt(t) {
+    const out = [];
+    for (const kind of enabledAuto()) {
+        const r = state.auto[kind].result;
+        const n = Math.floor((t - r.start) * r.fps + 1e-3);
+        if (n < 0 || n >= r.frames.length) continue;
+        for (const [x, y, w, h] of r.frames[n] || []) out.push({x, y, w, h});
+    }
+    return out;
 }
 
 // 구간 검사. ok가 false면 message에 안내

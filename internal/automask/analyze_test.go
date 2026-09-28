@@ -1,0 +1,70 @@
+package automask
+
+import (
+	"image"
+	"testing"
+
+	"simpleEdit/internal/frame"
+	"simpleEdit/internal/media"
+)
+
+func TestDetectSize(t *testing.T) {
+	tests := []struct{ w, h, limit, ww, wh int }{
+		{1920, 1080, 640, 640, 360},
+		{1080, 1920, 640, 360, 640},
+		{320, 240, 640, 320, 240},
+		{1281, 721, 0, 1280, 720},
+	}
+	for _, tt := range tests {
+		if w, h := detectSize(tt.w, tt.h, tt.limit); w != tt.ww || h != tt.wh {
+			t.Errorf("detectSize(%d,%d,%d) = %dx%d, want %dx%d", tt.w, tt.h, tt.limit, w, h, tt.ww, tt.wh)
+		}
+	}
+}
+
+func TestBlockSize(t *testing.T) {
+	tests := map[int]int{40: 16, 128: 16, 200: 25, 400: 50}
+	for side, want := range tests {
+		if got := blockSize(image.Rect(0, 0, side, side/2)); got != want {
+			t.Errorf("blockSize(%d) = %d, want %d", side, got, want)
+		}
+	}
+}
+
+func TestPixelateFuncUsesFrameBoxes(t *testing.T) {
+	auto := [][]media.Rect{nil, {{X: 0.5, Y: 0, W: 0.5, H: 1}}}
+	fn := PixelateFunc([]media.Rect{{X: 0, Y: 0, W: 0.25, H: 1}}, auto)
+	for n := 0; n < 3; n++ {
+		f := frame.New(64, 16)
+		for i := range f.Pix {
+			f.Pix[i] = byte(i)
+		}
+		orig := append([]byte(nil), f.Pix...)
+		if err := fn(n, f); err != nil {
+			t.Fatal(err)
+		}
+		changed := func(x int) bool {
+			o := (8*64 + x) * 3
+			return f.Pix[o] != orig[o]
+		}
+		if !changed(3) {
+			t.Errorf("%d번: 수동 사각형이 안 가려짐", n)
+		}
+		if changed(24) {
+			t.Errorf("%d번: 가리지 않을 곳이 바뀜", n)
+		}
+		if got := changed(40); got != (n == 1) {
+			t.Errorf("%d번: 자동 박스 적용 = %v", n, got)
+		}
+	}
+}
+
+func TestOptionsFor(t *testing.T) {
+	o30, o60 := OptionsFor(30), OptionsFor(59.94)
+	if o30.Step != 1 || o30.Track.MaxGap != 15 || o30.Track.Hold != 9 {
+		t.Errorf("30fps: %+v", o30)
+	}
+	if o60.Step != 2 || o60.Track.MaxGap != 30 || o60.Track.Hold != 18 {
+		t.Errorf("60fps: %+v", o60)
+	}
+}

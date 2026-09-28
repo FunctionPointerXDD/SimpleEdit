@@ -1,11 +1,16 @@
 package detect
 
 import (
+	"errors"
 	"fmt"
+	"path/filepath"
 	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
+
+// ErrRuntime은 런타임 로드 실패(주로 VC++ 런타임 없음)다.
+var ErrRuntime = errors.New("onnxruntime을 불러오지 못함")
 
 var (
 	initMu  sync.Mutex
@@ -22,9 +27,10 @@ func Init(libPath string) error {
 		}
 		return nil
 	}
+	addDLLDir(filepath.Dir(libPath))
 	ort.SetSharedLibraryPath(libPath)
 	if err := ort.InitializeEnvironment(); err != nil {
-		return fmt.Errorf("onnxruntime 초기화: %w", err)
+		return fmt.Errorf("%w: %v", ErrRuntime, err)
 	}
 	initLib = libPath
 	return nil

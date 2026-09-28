@@ -14,6 +14,8 @@ import (
 
 	"simpleEdit/internal/appdir"
 	"simpleEdit/internal/applog"
+	"simpleEdit/internal/automask"
+	"simpleEdit/internal/detect"
 	"simpleEdit/internal/download"
 	"simpleEdit/internal/job"
 	"simpleEdit/internal/media"
@@ -51,6 +53,7 @@ type ExportRequest struct {
 	End      float64      `json:"end"`
 	Rects    []media.Rect `json:"rects"`
 	FileName string       `json:"fileName"`
+	Auto     []string     `json:"auto"`
 }
 
 // ProgressEvent의 Remaining은 남은 초, 모르면 -1.
@@ -73,10 +76,14 @@ type App struct {
 	info       media.Info
 	version    int
 	lastOutput string
+	auto       map[string]automask.Result
+
+	detMu   sync.Mutex
+	faceDet *detect.FaceDetector
 }
 
 func NewApp() *App {
-	return &App{updateDone: make(chan struct{})}
+	return &App{updateDone: make(chan struct{}), auto: map[string]automask.Result{}}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -123,8 +130,10 @@ func (a *App) beforeClose(ctx context.Context) bool {
 
 // shutdown은 미완성 파일 정리가 끝날 때까지 기다린다.
 func (a *App) shutdown(ctx context.Context) {
-	if !a.jobs.CancelAndWait(shutdownWaitMax) {
-		applog.Printf("종료 전 작업 정리가 시간 안에 끝나지 않음")
+	if a.jobs.CancelAndWait(shutdownWaitMax) {
+		a.closeDetectors()
+	} else {
+		applog.Printf("종료 전 작업 정리가 시간 안에 끝나지 않음 (검출기 해제 생략)")
 	}
 	applog.Printf("===== 종료")
 	applog.Close()
@@ -229,6 +238,7 @@ func (a *App) load(ctx context.Context, path, workDir string, emit func(float64,
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.source, a.preview, a.info = path, preview, info
+	a.auto = map[string]automask.Result{}
 	a.version++
 	return VideoInfo{
 		URL:      "/video/current?v=" + strconv.Itoa(a.version),
@@ -243,6 +253,7 @@ func (a *App) CloseVideo() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.source, a.preview, a.info = "", "", media.Info{}
+	a.auto = map[string]automask.Result{}
 	a.lastOutput = ""
 	applog.Printf("영상 닫음")
 }
@@ -289,13 +300,9 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	if source == "" {
 		return "", userError(msgNoVideo, nil)
 	}
-	start := max(0, req.Start)
-	end := min(info.Duration, req.End)
-	if end <= start {
-		return "", userError(msgBadRange, nil)
-	}
-	if end-start < minClipSeconds {
-		return "", userError(msgTooShort, nil)
+	start, end, err := clipRange(info, req.Start, req.End)
+	if err != nil {
+		return "", err
 	}
 	if len(req.Rects) > media.MaxRects {
 		return "", userError(msgTooManyRects, nil)
@@ -303,6 +310,12 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	name, err := appdir.CleanFileName(req.FileName)
 	if err != nil {
 		return "", fileNameError(err)
+	}
+	var auto [][]media.Rect
+	if len(req.Auto) > 0 {
+		if auto, err = a.autoFrames(req.Auto, start, end); err != nil {
+			return "", userError(msgAutoStale, err)
+		}
 	}
 
 	ctx, done, err := a.jobs.Begin(a.ctx)
@@ -316,13 +329,18 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	}
 	out := appdir.OutputPath(outDir, name)
 	rects := media.RectsToPixels(req.Rects, info.Width, info.Height)
-	applog.Printf("저장: %.2f~%.2f초, 사각형 %v → %s", start, end, rects, out)
+	applog.Printf("저장: %.2f~%.2f초, 사각형 %v, 자동 %v → %s", start, end, rects, req.Auto, out)
 
 	emit := a.progressEmitter(evExportProgress)
 	emit(0, "export")
-	err = media.Export(ctx, media.ExportSpec{
-		Source: source, Output: out, Start: start, Duration: end - start, Rects: rects,
-	}, func(f float64) { emit(f, "export") })
+	progress := func(f float64) { emit(f, "export") }
+	if auto != nil {
+		err = exportAuto(ctx, pipeSpec(source, info, start, end), out, req.Rects, auto, progress)
+	} else {
+		err = media.Export(ctx, media.ExportSpec{
+			Source: source, Output: out, Start: start, Duration: end - start, Rects: rects,
+		}, progress)
+	}
 	if err != nil {
 		return "", exportError(err)
 	}
