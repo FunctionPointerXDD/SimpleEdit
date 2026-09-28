@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="description" content="운전 영상 편집기 MVP(Go + Wails)의 구현 상태, PRD 대비 진행률, 검증 결과, 남은 작업과 인수인계 정보" />
+    <link rel="icon" href="data:," />
+    <title>운전 영상 편집기 MVP 상태판</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172033;
+        --muted: #64748b;
+        --line: #dbe3ef;
+        --blue: #155eef;
+        --blue-deep: #19376d;
+        --nav: #0f172a;
+        --paper: #ffffff;
+        --soft: #f5f8fc;
+        --good: #0f766e;
+        --good-soft: #dff7f1;
+        --warn: #b45309;
+        --warn-soft: #fff5df;
+        --danger: #b42318;
+        --danger-soft: #fff1ef;
+        --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Pretendard",
+          "Apple SD Gothic Neo", sans-serif;
+        --font-code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        min-width: 20rem;
+        background: var(--soft);
+        color: var(--ink);
+        font: 15px/1.7 var(--font-body);
+        overflow-wrap: break-word;
+        word-break: keep-all;
+      }
+      a { color: #174ea6; text-underline-offset: 0.18em; }
+      a:focus-visible, button:focus-visible, summary:focus-visible {
+        outline: 3px solid #60a5fa;
+        outline-offset: 3px;
+      }
+      code, pre, .numeric, time {
+        font-family: var(--font-code);
+        font-variant-ligatures: none;
+        font-variant-numeric: tabular-nums;
+      }
+      code {
+        padding: 2px 5px;
+        border-radius: 5px;
+        background: #eef4ff;
+        color: #143c8c;
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+      .masthead {
+        margin: 44px 56px 0 340px;
+        padding: 40px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, var(--nav), var(--blue-deep));
+        color: #ffffff;
+      }
+      .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+      .badge {
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: #dbeafe;
+        color: #1e40af;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .badge.warn { background: #fde68a; color: #92400e; }
+      h1 { margin: 0; font-size: clamp(2rem, 3vw, 2.5rem); letter-spacing: -0.035em; }
+      .deck { max-width: 980px; margin: 20px 0 0; color: #dbeafe; }
+      .toc {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: 284px;
+        padding: 28px 20px;
+        overflow-y: auto;
+        background: var(--nav);
+        color: #dbeafe;
+      }
+      .toc h2 { margin: 0; color: #ffffff; font-size: 18px; }
+      .toc p { margin: 4px 0 20px; color: #94a3b8; font-size: 12px; }
+      .toc ol { margin: 0; padding: 0; list-style: none; counter-reset: toc; }
+      .toc li { counter-increment: toc; }
+      .toc a {
+        display: grid;
+        grid-template-columns: 1.7rem minmax(0, 1fr);
+        gap: 3px;
+        margin: 3px 0;
+        padding: 8px 10px;
+        border-radius: 8px;
+        color: #cbd5e1;
+        text-decoration: none;
+      }
+      .toc a::before {
+        color: #93c5fd;
+        content: counter(toc) ".";
+        font: 800 11px var(--font-code);
+      }
+      .toc a:hover { background: #1e293b; color: #ffffff; }
+      main { min-width: 0; margin-left: 284px; padding: 28px 56px 90px; }
+      section {
+        margin: 0 0 28px;
+        padding: 30px 34px;
+        scroll-margin-top: 24px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--paper);
+      }
+      section h2 { margin: 0 0 18px; font-size: 25px; letter-spacing: -0.02em; }
+      section h3 { margin: 24px 0 10px; font-size: 18px; }
+      .callout, .card {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fbfdff;
+      }
+      .callout p, .card p { margin: 6px 0 0; }
+      .callout ul, .card ul { margin: 6px 0 0; padding-left: 18px; }
+      .callout.good { border-color: #99ddd2; background: var(--good-soft); color: #115e59; }
+      .callout.warn { border-color: #f3cd8b; background: var(--warn-soft); color: #92400e; }
+      .callout.danger { border-color: #fecaca; background: var(--danger-soft); color: #8f2d24; }
+      .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+      .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }
+      .stat { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fbfdff; }
+      .stat b { display: block; font: 800 26px var(--font-code); color: var(--blue-deep); }
+      .stat span { color: var(--muted); font-size: 13px; }
+      .table-scroll { width: 100%; margin: 14px 0; overflow-x: auto; }
+      table { width: 100%; min-width: 720px; border-collapse: collapse; }
+      caption { padding-bottom: 8px; color: var(--muted); font-size: 12px; text-align: left; }
+      th, td { min-width: 110px; padding: 11px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { background: #f1f5f9; color: #334155; }
+      .st { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+      .st.ok { background: var(--good-soft); color: var(--good); }
+      .st.part { background: var(--warn-soft); color: var(--warn); }
+      .st.no { background: var(--danger-soft); color: var(--danger); }
+      .st.info { background: #e0e7ff; color: #3730a3; }
+      pre {
+        overflow-x: auto;
+        margin: 12px 0;
+        padding: 18px;
+        border-radius: 10px;
+        background: #111827;
+        color: #e2e8f0;
+        font-size: 13px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+      .diagram {
+        margin: 18px 0;
+        padding: 12px;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #f8fbff;
+      }
+      .diagram svg { display: block; width: 100%; min-width: 720px; height: auto; }
+      .diagram figcaption {
+        min-width: 0;
+        margin-top: 12px;
+        padding: 12px 14px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.65;
+      }
+      .terminal {
+        margin: 14px 0;
+        overflow: hidden;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        background: #111827;
+        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+      .terminal.copied { border-color: #34d399; box-shadow: 0 0 0 3px #34d3992e; }
+      .terminal-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 9px 10px 9px 14px;
+        border-bottom: 1px solid #334155;
+        background: #0b1220;
+        color: #94a3b8;
+        font: 700 11px var(--font-code);
+      }
+      .terminal pre { margin: 0; border-radius: 0; background: transparent; }
+      .copy-icon {
+        display: inline-flex;
+        min-width: 42px;
+        min-height: 40px;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 7px 10px;
+        border: 1px solid #475569;
+        border-radius: 8px;
+        background: #1e293b;
+        color: #e2e8f0;
+        font: 800 11px var(--font-body);
+        cursor: pointer;
+      }
+      .copy-icon.copied { border-color: #34d399; background: #064e3b; color: #d1fae5; }
+      .copy-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+      .copy-icon .icon-check { display: none; }
+      .copy-icon.copied .icon-copy { display: none; }
+      .copy-icon.copied .icon-check { display: block; }
+      .copy-status { min-height: 1.5em; margin: 7px 0 0; color: var(--good); font-size: 13px; }
+      .command-contract {
+        margin: 16px 0;
+        padding: 18px;
+        border: 1px solid #93c5fd;
+        border-radius: 12px;
+        background: #f8fbff;
+      }
+      .command-contract h3 { margin-top: 0; }
+      .command-contract dl { display: grid; grid-template-columns: 150px minmax(0, 1fr); margin: 0; }
+      .command-contract dt, .command-contract dd { margin: 0; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+      .command-contract dt { color: #1e3a5f; font-weight: 800; }
+      .command-contract dd { min-width: 0; }
+      .checklist { padding: 0; list-style: none; }
+      .checklist li { position: relative; padding: 8px 0 8px 28px; border-bottom: 1px solid var(--line); }
+      .checklist li::before { position: absolute; top: 13px; left: 2px; width: 12px; height: 12px; border: 1px solid #94a3b8; border-radius: 3px; content: ""; }
+      .checklist li.done::before { border-color: var(--good); background: var(--good); }
+      details { margin: 12px 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fbfdff; }
+      summary { font-weight: 800; cursor: pointer; }
+      footer { margin-left: 284px; padding: 0 56px 40px; color: var(--muted); font-size: 12px; }
+
+      @media (max-width: 1000px) {
+        .masthead { margin: 0; padding: 28px 24px; border-radius: 0; }
+        .toc { position: static; width: auto; }
+        .toc ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+        main { margin: 0; padding: 24px; }
+        footer { margin: 0; padding: 0 24px 32px; }
+        .grid { grid-template-columns: 1fr; }
+        .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 700px) {
+        main { padding: 18px 12px 48px; }
+        section { margin-bottom: 14px; padding: 22px 18px; border-radius: 10px; }
+        .copy-label { display: none; }
+        .copy-icon { min-width: 42px; padding: 7px; }
+        .command-contract dl { grid-template-columns: 1fr; }
+        .command-contract dt { padding-bottom: 2px; border-bottom: 0; }
+        .command-contract dd { padding-top: 2px; }
+      }
+      @media print {
+        @page { size: A4; margin: 14mm; }
+        body { background: #ffffff; font-size: 9.5pt; }
+        .toc, .copy-icon, .copy-status { display: none; }
+        .masthead { margin: 0 0 8mm; padding: 10mm; border-radius: 0; print-color-adjust: exact; }
+        main { margin: 0; padding: 0; }
+        section { margin: 0 0 7mm; padding: 7mm; border-radius: 0; }
+        footer { margin: 0; padding: 0; }
+        h2, h3, table, tr, .callout, .card, pre, .diagram, .terminal { break-inside: avoid; }
+        .table-scroll { overflow: visible; }
+        table { min-width: 0; font-size: 7.5pt; }
+        .diagram svg { min-width: 0; }
+        details { display: block; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="badges">
+        <span class="badge">구현·검증 상태판</span>
+        <span class="badge">2026-09-28 KST 기준</span>
+        <span class="badge">코드 기준 69bf6da + 배포 스크립트 수정</span>
+        <span class="badge warn">PRD 2·3단계 검증 진행 중</span>
+      </div>
+      <h1>운전 영상 편집기 MVP 상태판</h1>
+      <p class="deck">
+        PRD의 기능 5개(F1–F5)는 모두 구현되어 <code>main</code>에 push되었습니다. PRD 1단계 기술 검증 4개 항목은 WSL과 Windows에서 통과했고,
+        실제 Windows 앱에서는 다운로드 → 미리보기 → 탐색 → "여기서 시작"까지 직접 확인했습니다.
+        마지막 두 차례 수정(저장 위치·파일 이름, 영상 요소 재사용, 붙여넣기 버튼 제거)은 모의 백엔드 UI 테스트로만 검증했고, 실제 Windows 앱 재확인과 강사님 사용성 테스트(PRD 3단계)가 남아 있습니다.
+      </p>
+    </header>
+
+    <aside class="toc">
+      <h2>SimpleEdit 상태판</h2>
+      <p>Go + Wails v2 · Windows 10/11 · 문서 기준 커밋 69bf6da</p>
+      <nav aria-label="문서 목차">
+        <ol>
+          <li><a href="#summary">현재 상태 요약</a></li>
+          <li><a href="#features">PRD 기능 진행</a></li>
+          <li><a href="#tests">PRD 테스트 계획 진행</a></li>
+          <li><a href="#architecture">구조와 데이터 흐름</a></li>
+          <li><a href="#flow">사용자 흐름과 영상 수명</a></li>
+          <li><a href="#codemap">코드 맵</a></li>
+          <li><a href="#decisions">PRD 대비 결정·변경</a></li>
+          <li><a href="#timeline">발견·수정 이력</a></li>
+          <li><a href="#risks">남은 작업과 리스크</a></li>
+          <li><a href="#build">개발·빌드 명령</a></li>
+          <li><a href="#handoff">인수인계와 AI 실행 명세</a></li>
+          <li><a href="#refs">참고와 증거 한계</a></li>
+        </ol>
+      </nav>
+    </aside>
+
+    <main>
+      <section id="summary">
+        <h2>1. 현재 상태 요약</h2>
+        <div class="stats">
+          <div class="stat"><b>5 / 5</b><span>PRD 기능 구현 (F1–F5)</span></div>
+          <div class="stat"><b>4 / 4</b><span>PRD 1단계 기술 검증 통과</span></div>
+          <div class="stat"><b>2 / 5</b><span>PRD 2단계 기능 테스트 완료 (3개 부분·미검증)</span></div>
+          <div class="stat"><b>0 / 3</b><span>PRD 3단계 사용성 테스트</span></div>
+        </div>
+        <div class="grid">
+          <div class="callout good"><strong>확정</strong>
+            <ul>
+              <li>Go 단위 테스트 19개 통과, 실패 0 (<code>go test ./internal/...</code>)</li>
+              <li>staticcheck (Windows 대상 전체) 경고 0</li>
+              <li>모의 백엔드 UI 테스트 36개 항목 × 가로·세로 영상 모두 통과</li>
+              <li>Windows 실제 앱에서 10분 1080p 유튜브 영상을 약 30초에 받아 재생·탐색 확인</li>
+              <li>Windows에서 저장·취소, 취소 후 프로세스 잔존 0 확인 (devcli)</li>
+              <li>배포 zip(182MB)을 Windows 기본 압축 해제로 풀어 실행, bin\ 도구 인식·업데이트·정상 종료 확인</li>
+            </ul>
+          </div>
+          <div class="callout warn"><strong>미확정</strong>
+            <ul>
+              <li>최근 수정(영상 요소 재사용, 저장 이름·위치, 붙여넣기 버튼 제거)의 실제 Windows 앱 동작</li>
+              <li>Shorts·비공개·삭제 영상 실제 주소에서의 안내</li>
+              <li>인터넷 차단 상태 시작, 카카오톡 전송 재생</li>
+              <li>i5급 사무용 PC에서의 저장 속도</li>
+            </ul>
+          </div>
+          <div class="card"><strong>비범위 (PRD 7장)</strong>
+            <p>여러 구간 이어 붙이기, 시간대별·추적 모자이크, 자동 인식, MP4 외 형식, 설치 파일·코드 서명, 하드웨어 인코딩, macOS·다국어.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="features">
+        <h2>2. PRD 기능 진행 (F1–F5 + 추가 요청)</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>출처: 코드(커밋 69bf6da), devcli 실행 결과, Windows 실제 앱 캡처, 모의 UI 테스트. 관측 시점 2026-09-28 KST.</caption>
+            <thead><tr><th>ID</th><th>기능</th><th>상태</th><th>구현 요점</th><th>근거</th><th>남은 확인</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>F1</td><td>영상 불러오기</td><td><span class="st ok">구현·Windows 확인</span></td>
+                <td>주소 칸 + "영상 받기"(붙여넣기 버튼은 사용자 요청으로 제거), watch·youtu.be·shorts·live 주소 정규화, 1080p 이하 H.264 우선, "내 컴퓨터 영상 열기", H.264가 아니면 720p 미리보기 변환</td>
+                <td>Windows 앱: 진행률·퍼센트·남은 시간 표시 후 미리보기 재생. <code>TestNormalizeURL</code></td>
+                <td>새 1단계 화면 실제 앱 확인, Shorts 실제 다운로드</td>
+              </tr>
+              <tr>
+                <td>F2</td><td>구간 자르기</td><td><span class="st ok">구현·확인</span></td>
+                <td>"여기서 시작/끝", 0.1초 단위, 끝 &lt; 시작·1초 미만이면 "다음" 잠금과 안내, 선택 구간 막대 표시</td>
+                <td>devcli: 12.3–42.3초 요청 → 결과 길이 30.000초 (±0.2초 기준 충족)</td>
+                <td>없음 (실제 영상 반복 확인 권장)</td>
+              </tr>
+              <tr>
+                <td>F3</td><td>영역 가리기</td><td><span class="st part">구현·부분 확인</span></td>
+                <td>캔버스 드래그, 최대 5개, "지우기", 레터박스를 뺀 영상 영역 기준 0–1 비율 → Go에서 원본 좌표·짝수 변환, 16px 블록 모자이크</td>
+                <td>1080p 합성 영상 프레임에서 3개 위치 확인, 모의 UI 비율 테스트(가로·세로), <code>TestToPixels</code>, <code>TestMosaicFilter</code></td>
+                <td>실제 720p·세로 영상 저장 결과 대조</td>
+              </tr>
+              <tr>
+                <td>F4</td><td>MP4 저장</td><td><span class="st part">구현·부분 확인</span></td>
+                <td>H.264(yuv420p) + AAC, faststart, 진행률·남은 시간·취소, 파일 이름 수정, 저장 위치 바꾸기(기억), 같은 이름이면 <code>_2</code>, 완료 후 "저장 폴더 열기"</td>
+                <td>ffprobe로 h264/yuv420p/aac 확인, 1080p 60초 3개 모자이크 16.4초(WSL 12스레드), Windows 5.9초(30초 구간)</td>
+                <td>Windows 기본 플레이어·카카오톡 재생, 새 이름·위치 UI 실제 앱 확인</td>
+              </tr>
+              <tr>
+                <td>F5</td><td>도구 자동 업데이트</td><td><span class="st part">구현·부분 확인</span></td>
+                <td>시작 시 백그라운드 <code>yt-dlp -U</code>, 실패 무시, 첫 다운로드는 업데이트를 최대 20초 기다림</td>
+                <td>Windows 로그: <code>[yt-dlp] 정상 종료</code></td>
+                <td>인터넷 차단 상태 시작</td>
+              </tr>
+              <tr>
+                <td>추가</td><td>안정성 보완</td><td><span class="st info">구현</span></td>
+                <td>403 자동 재시도(총 2회), 생방송 분류, 종료 시 미완성 파일 정리 대기(최대 5초), 단계 간 <code>&lt;video&gt;</code> 재사용, 최대화 시작</td>
+                <td><code>TestCancelAndWait</code>, 모의 UI "영상 파일 재요청 0회"</td>
+                <td>실제 앱에서 끊김 개선 체감 확인</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tests">
+        <h2>3. PRD 테스트 계획 진행 (8장)</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>상태 기준: 완료 = 해당 조건을 실제로 실행해 관측, 부분 = 대체 수단(단위·모의 테스트)으로만 확인, 미검증 = 실행하지 않음.</caption>
+            <thead><tr><th>단계</th><th>항목</th><th>상태</th><th>근거 / 비고</th></tr></thead>
+            <tbody>
+              <tr><td>1단계</td><td>yt-dlp 숨김 실행 + 줄 단위 진행률</td><td><span class="st ok">완료</span></td><td>WSL·Windows devcli, 진행률 0→97% 단조 증가 후 합치기 단계</td></tr>
+              <tr><td>1단계</td><td>ffprobe JSON → 구조체</td><td><span class="st ok">완료</span></td><td><code>TestParseProbe*</code> 4개, 실제 파일 probe</td></tr>
+              <tr><td>1단계</td><td>자르기 / +사각형 1개 / +3개 재생 가능 MP4</td><td><span class="st ok">완료</span></td><td>WSL·Windows에서 3종 생성, 길이 30.000 / 60.000초</td></tr>
+              <tr><td>1단계</td><td>Cancel 시 ffmpeg 종료 + 미완성 파일 삭제</td><td><span class="st ok">완료</span></td><td>Windows: 출력 파일 없음, ffmpeg·yt-dlp·deno 잔존 0 (Job Object)</td></tr>
+              <tr><td>2단계</td><td>일반 / Shorts / 비공개·삭제 주소</td><td><span class="st part">부분</span></td><td>일반 영상 실제 확인. Shorts·비공개·삭제는 URL 정규화·stderr 분류 단위 테스트만</td></tr>
+              <tr><td>2단계</td><td>미리보기 앞뒤 탐색</td><td><span class="st ok">완료</span></td><td>Windows 앱에서 5분 16초 지점 탐색 후 재생 (Range 서빙)</td></tr>
+              <tr><td>2단계</td><td>720p·1080p·세로 영상 사각형 위치 일치</td><td><span class="st part">부분</span></td><td>1080p 합성 영상 프레임 확인 + 모의 UI 가로·세로 비율 확인. 실제 저장 결과 대조 없음</td></tr>
+              <tr><td>2단계</td><td>인터넷 차단 상태 시작·다운로드 실패 안내</td><td><span class="st no">미검증</span></td><td>안내 문구는 모의 UI에서 확인</td></tr>
+              <tr><td>2단계</td><td>Windows 기본 플레이어·카카오톡 재생</td><td><span class="st no">미검증</span></td><td>코덱 조건(H.264 yuv420p + AAC + faststart)만 확인</td></tr>
+              <tr><td>3단계</td><td>설명 없이 30초 자르기 + 번호판 가리기 과제</td><td><span class="st no">미시작</span></td><td>사용자(개발자) 직접 테스트 소감 "꽤 괜찮아"는 받음, 강사님 테스트 아님</td></tr>
+              <tr><td>3단계</td><td>도움 없이 10분 안에 완료</td><td><span class="st no">미시작</span></td><td>-</td></tr>
+              <tr><td>3단계</td><td>막힌 화면·망설인 버튼 기록</td><td><span class="st no">미시작</span></td><td>-</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>4. 구조와 데이터 흐름</h2>
+        <p>질문: "화면의 버튼 하나가 어떤 경로로 외부 도구를 실행하고, 결과 파일은 어디에 남는가?"</p>
+        <figure class="diagram">
+          <svg viewBox="0 0 1120 560" role="img" aria-label="프론트엔드가 Wails 바인딩으로 Go App을 호출하고, Go 내부 패키지가 yt-dlp와 ffmpeg를 숨김 실행해 작업 폴더와 저장 폴더에 파일을 쓰며, 진행률은 이벤트로, 미리보기는 HTTP Range로 돌아오는 구조" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="a-call" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#155eef"/></marker>
+              <marker id="a-event" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#0f766e"/></marker>
+              <marker id="a-write" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b45309"/></marker>
+              <marker id="a-read" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#64748b"/></marker>
+              <style>
+                .lane{fill:#eef4ff;stroke:#c7d7f5;stroke-width:1.5}
+                .lanet{font:800 15px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#19376d}
+                .n{fill:#fff;stroke:#94a3b8;stroke-width:2}
+                .ext{fill:#fff7ed;stroke:#f59e0b;stroke-width:2}
+                .store{fill:#f0fdf4;stroke:#16a34a;stroke-width:2}
+                .t{font:700 14px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#172033}
+                .s{font:12px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#475569}
+                .call{stroke:#155eef;stroke-width:2.5;fill:none;marker-end:url(#a-call)}
+                .event{stroke:#0f766e;stroke-width:2.5;fill:none;stroke-dasharray:8 5;marker-end:url(#a-event)}
+                .write{stroke:#b45309;stroke-width:2.5;fill:none;marker-end:url(#a-write)}
+                .read{stroke:#64748b;stroke-width:2.5;fill:none;stroke-dasharray:3 4;marker-end:url(#a-read)}
+                .lbl{font:11px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#334155}
+              </style>
+            </defs>
+            <rect class="lane" x="10" y="10" width="250" height="540" rx="12"/><text class="lanet" x="26" y="36">프론트엔드 (WebView2)</text>
+            <rect class="lane" x="290" y="10" width="250" height="540" rx="12"/><text class="lanet" x="306" y="36">Go App (app.go)</text>
+            <rect class="lane" x="570" y="10" width="250" height="540" rx="12"/><text class="lanet" x="586" y="36">Go 내부 패키지</text>
+            <rect class="lane" x="850" y="10" width="260" height="540" rx="12"/><text class="lanet" x="866" y="36">외부 도구 · 파일</text>
+
+            <rect class="n" x="30" y="60" width="210" height="70" rx="10"/><text class="t" x="44" y="88">steps/*.js · wizard.js</text><text class="s" x="44" y="110">4단계 화면, 상태(state.js)</text>
+            <rect class="n" x="30" y="170" width="210" height="60" rx="10"/><text class="t" x="44" y="196">api.js</text><text class="s" x="44" y="216">Go와 통신하는 유일한 창구</text>
+            <rect class="n" x="30" y="330" width="210" height="70" rx="10"/><text class="t" x="44" y="358">media/videoSource.js</text><text class="s" x="44" y="380">공유 &lt;video&gt; 요소 1개</text>
+
+            <rect class="n" x="310" y="60" width="210" height="60" rx="10"/><text class="t" x="324" y="86">progressEmitter</text><text class="s" x="324" y="106">250ms 간격 이벤트</text>
+            <rect class="n" x="310" y="150" width="210" height="80" rx="10"/><text class="t" x="324" y="176">바인딩 메서드</text><text class="s" x="324" y="196">Download · OpenLocal · Export</text><text class="s" x="324" y="214">Cancel · CloseVideo · 저장 위치</text>
+            <rect class="n" x="310" y="250" width="210" height="56" rx="10"/><text class="t" x="324" y="274">job.Manager</text><text class="s" x="324" y="294">작업 1개, 취소·종료 대기</text>
+            <rect class="n" x="310" y="330" width="210" height="70" rx="10"/><text class="t" x="324" y="358">serveVideo</text><text class="s" x="324" y="380">/video/current, Range</text>
+
+            <rect class="n" x="590" y="60" width="210" height="60" rx="10"/><text class="t" x="604" y="86">download</text><text class="s" x="604" y="106">주소 검사, 진행률, 403 재시도</text>
+            <rect class="n" x="590" y="150" width="210" height="60" rx="10"/><text class="t" x="604" y="176">media</text><text class="s" x="604" y="196">probe, 모자이크 필터, 저장</text>
+            <rect class="n" x="590" y="240" width="210" height="60" rx="10"/><text class="t" x="604" y="266">appdir</text><text class="s" x="604" y="286">경로, 파일 이름, 설정</text>
+            <rect class="n" x="590" y="340" width="210" height="80" rx="10"/><text class="t" x="604" y="366">tools</text><text class="s" x="604" y="386">콘솔 창 숨김 + Job Object</text><text class="s" x="604" y="406">download·media가 이걸로 실행</text>
+
+            <rect class="ext" x="866" y="60" width="232" height="60" rx="10"/><text class="t" x="880" y="86">yt-dlp.exe + deno.exe</text><text class="s" x="880" y="106">bin\ 폴더, PATH 비의존</text>
+            <rect class="ext" x="866" y="150" width="232" height="60" rx="10"/><text class="t" x="880" y="176">ffmpeg / ffprobe.exe</text><text class="s" x="880" y="196">bin\ 폴더</text>
+            <rect class="store" x="866" y="250" width="232" height="70" rx="10"/><text class="t" x="880" y="276">작업 폴더</text><text class="s" x="880" y="296">%LOCALAPPDATA%\운전영상편집기</text><text class="s" x="880" y="312">work (7일 뒤 삭제), logs</text>
+            <rect class="store" x="866" y="360" width="232" height="60" rx="10"/><text class="t" x="880" y="386">저장 폴더</text><text class="s" x="880" y="406">기본 바탕화면, 바꾸면 기억</text>
+            <rect class="store" x="866" y="450" width="232" height="60" rx="10"/><text class="t" x="880" y="476">settings.json</text><text class="s" x="880" y="496">저장 폴더 기억</text>
+
+            <path class="call" d="M135 130 V170"/>
+            <path class="call" d="M240 200 H310"/><text class="lbl" x="246" y="192">바인딩 호출</text>
+            <path class="event" d="M310 90 H240"/><text class="lbl" x="250" y="82">진행률</text>
+            <path class="read" d="M240 365 H310"/><text class="lbl" x="246" y="357">GET Range</text>
+            <path class="call" d="M415 230 V250"/>
+            <path class="call" d="M520 190 H550 V90 H590"/>
+            <path class="call" d="M520 190 H550 V180 H590"/>
+            <path class="call" d="M520 190 H550 V270 H590"/>
+            <path class="call" d="M800 370 H835 V90 H866"/><text class="lbl" x="604" y="438">↗ 오른쪽 도구를 숨김 실행</text>
+            <path class="call" d="M800 395 H845 V180 H866"/>
+            <path class="write" d="M980 120 V250"/><text class="lbl" x="986" y="140">다운로드 파일 쓰기</text>
+            <path class="write" d="M1098 180 H1104 V390 H1098"/><text class="lbl" x="1040" y="236">저장 MP4</text>
+            <path class="write" d="M800 262 H866"/><text class="lbl" x="806" y="256">로그</text>
+            <path class="write" d="M800 285 H825 V480 H866"/><text class="lbl" x="760" y="476">폴더 기억</text>
+            <path class="read" d="M866 310 H540 V365 H520"/><text class="lbl" x="620" y="324">미리보기 파일 읽기</text>
+          </svg>
+          <figcaption data-diagram-explanation="v1">
+            왼쪽에서 오른쪽으로 읽습니다. <strong>파란 실선</strong>은 호출 방향(호출하는 쪽 → 호출되는 쪽)입니다. 프론트는 <code>api.js</code>를 통해서만 Go 바인딩을 부르고, Go는 <code>tools</code>를 거쳐 <code>bin\</code>의 외부 도구를 콘솔 창 없이, 하나의 Job Object로 묶어 실행합니다.
+            <strong>초록 점선</strong>은 Go → 프론트 방향의 진행률 이벤트(<code>download:progress</code>, <code>export:progress</code>)이며, 프론트는 이 이벤트에 응답하지 않습니다.
+            <strong>주황 실선</strong>은 파일 쓰기입니다. yt-dlp는 작업 폴더에, ffmpeg 저장 결과는 저장 폴더에 쓰고, <code>appdir</code>는 로그와 settings.json을 씁니다.
+            <strong>회색 점선</strong>은 읽기 전용입니다. <code>&lt;video&gt;</code>가 <code>/video/current</code>를 Range 요청으로 읽고, <code>serveVideo</code>가 작업 폴더(또는 로컬 원본)의 미리보기 파일을 읽어 내보냅니다.
+            영속 상태를 가진 곳은 초록 상자(작업 폴더, 저장 폴더, settings.json)뿐입니다. 원본 영상과 미리보기는 저장할 때 절대 수정되지 않고, 저장은 항상 원본에서 다시 인코딩합니다.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="flow">
+        <h2>5. 사용자 흐름과 영상 수명</h2>
+        <p>질문: "각 단계에서 '다음'은 언제 열리고, 불러온 영상은 언제 닫히는가?"</p>
+        <figure class="diagram">
+          <svg viewBox="0 0 1120 360" role="img" aria-label="4단계 마법사의 전진 조건과, 공유 video 요소 및 Go 원본 상태가 열리고 닫히는 시점" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="f-fwd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#155eef"/></marker>
+              <marker id="f-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#64748b"/></marker>
+              <marker id="f-close" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b42318"/></marker>
+              <style>
+                .st1{fill:#fff;stroke:#155eef;stroke-width:2}
+                .gate{fill:#eff6ff;stroke:#93c5fd;stroke-width:1.5}
+                .life{fill:#dff7f1;stroke:#0f766e;stroke-width:2}
+                .gone{fill:#fff1ef;stroke:#b42318;stroke-width:2}
+                .t{font:800 15px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#172033}
+                .s{font:12px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#475569}
+                .fwd{stroke:#155eef;stroke-width:2.5;fill:none;marker-end:url(#f-fwd)}
+                .back{stroke:#64748b;stroke-width:2;fill:none;stroke-dasharray:6 5;marker-end:url(#f-back)}
+                .close{stroke:#b42318;stroke-width:2.5;fill:none;marker-end:url(#f-close)}
+                .lbl{font:11px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#334155}
+              </style>
+            </defs>
+            <rect class="st1" x="20" y="40" width="200" height="80" rx="12"/><text class="t" x="36" y="72">1. 영상 불러오기</text><text class="s" x="36" y="96">주소 칸 + 영상 받기</text>
+            <rect class="st1" x="300" y="40" width="200" height="80" rx="12"/><text class="t" x="316" y="72">2. 구간 자르기</text><text class="s" x="316" y="96">여기서 시작 / 끝</text>
+            <rect class="st1" x="580" y="40" width="200" height="80" rx="12"/><text class="t" x="596" y="72">3. 가릴 곳 정하기</text><text class="s" x="596" y="96">최대 5개, 건너뛰기 가능</text>
+            <rect class="st1" x="860" y="40" width="240" height="80" rx="12"/><text class="t" x="876" y="72">4. 저장하기</text><text class="s" x="876" y="96">이름·위치 → MP4</text>
+
+            <path class="fwd" d="M220 70 H300"/><text class="lbl" x="226" y="62">G1 통과</text>
+            <path class="fwd" d="M500 70 H580"/><text class="lbl" x="506" y="62">G2 통과</text>
+            <path class="fwd" d="M780 70 H860"/><text class="lbl" x="786" y="62">G3 항상</text>
+            <path class="back" d="M300 105 H220"/><text class="lbl" x="232" y="124">이전</text>
+            <path class="back" d="M580 105 H500"/><text class="lbl" x="512" y="124">이전</text>
+            <path class="back" d="M860 105 H780"/><text class="lbl" x="792" y="124">이전</text>
+
+            <rect class="life" x="20" y="170" width="1080" height="56" rx="10"/>
+            <text class="t" x="36" y="196">공유 &lt;video&gt; 1개 + Go 원본 상태(source/preview) 유지 구간</text>
+            <text class="s" x="36" y="215">단계를 오가도(저장 후 "이전" 포함) 같은 요소를 옮겨 붙이기만 함 → 파일 재요청 없음, 구간·가림·파일 이름 유지</text>
+
+            <rect class="gone" x="20" y="270" width="340" height="70" rx="10"/><text class="t" x="36" y="296">닫힘 ① 새 영상 편집하기</text><text class="s" x="36" y="318">api.closeVideo() + resetAll() → 1단계</text>
+            <rect class="gone" x="390" y="270" width="340" height="70" rx="10"/><text class="t" x="406" y="296">닫힘 ② 다른 영상 불러오기 성공</text><text class="s" x="406" y="318">setVideo(): url이 다르면 이전 요소 해제</text>
+            <rect class="gone" x="760" y="270" width="340" height="70" rx="10"/><text class="t" x="776" y="296">닫힘 ③ 창 닫기</text><text class="s" x="776" y="318">작업 중이면 확인, 정리 최대 5초 대기</text>
+            <path class="close" d="M980 226 V270"/>
+            <path class="close" d="M560 226 V270"/>
+            <path class="close" d="M190 226 V270"/>
+          </svg>
+          <figcaption data-diagram-explanation="v1">
+            위 줄은 화면 전진(<strong>파란 실선</strong>, 게이트 G1–G3을 통과해야 열림)과 후퇴(<strong>회색 점선</strong> "이전", 항상 가능하지만 작업 중에는 잠김)를 보여 줍니다.
+            가운데 초록 띠는 영상이 열려 있는 구간입니다. 영상은 1단계에서 불러오기가 성공하는 순간 열리고 미리 읽기를 시작합니다. 단계를 이동하거나 저장한 뒤에 "이전"을 눌러도 닫히지 않습니다.
+            <strong>빨간 실선</strong>은 영상이 닫히는 세 가지 경우입니다. 이 경우를 빼면 프론트 요소도, Go의 원본 경로 상태도 해제되지 않습니다.
+            저장은 원본 파일이나 작업 폴더를 지우지 않습니다. 작업 폴더는 앱을 시작할 때 7일이 지난 항목만 지웁니다.
+          </figcaption>
+        </figure>
+        <div class="table-scroll">
+          <table>
+            <caption>게이트 판단 기준 (frontend/src/state.js, steps/*.js 기준)</caption>
+            <thead><tr><th>게이트</th><th>판단 질문</th><th>통과 기준</th><th>탈락/실패 결과</th></tr></thead>
+            <tbody>
+              <tr><td>G1</td><td>불러온 영상이 있는가?</td><td><code>state.video</code>가 있음 (다운로드·로컬 열기 성공)</td><td>"다음" 비활성, 오류 원인 + 할 일 한 문장 안내, 1단계 유지</td></tr>
+              <tr><td>G2</td><td>구간이 올바른가?</td><td>끝 &gt; 시작, 길이 ≥ 1초 (<code>checkRange</code>)</td><td>"다음" 비활성, 안내 줄이 빨간 오류 문장으로 바뀜, 구간 막대 빨간색</td></tr>
+              <tr><td>G3</td><td>가릴 곳이 필요한가?</td><td>조건 없음 (0–5개 모두 허용)</td><td>6번째 사각형은 그려지지 않고 "5개까지" 안내</td></tr>
+              <tr><td>저장</td><td>저장할 수 있는가? (Go <code>Export</code>)</td><td>파일 이름 유효, 여유 공간 ≥ 추정 크기, 다른 작업 없음</td><td>4단계 유지, 이름·공간·작업 중 안내. 실패·취소 시 미완성 파일 삭제</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="codemap">
+        <h2>6. 코드 맵</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>경로는 저장소 루트 기준, 줄 번호는 커밋 69bf6da 이후 작업 트리 기준. Go 비테스트 코드 약 2,280줄.</caption>
+            <thead><tr><th>영역</th><th>파일 · 줄</th><th>책임</th></tr></thead>
+            <tbody>
+              <tr><td>진입점</td><td><a href="../main.go">main.go</a> :17</td><td>Wails 옵션(최대화 시작, 글자 칸 오른쪽 클릭 허용), AssetServer Handler 등록</td></tr>
+              <tr><td>바인딩</td><td><a href="../app.go">app.go</a> :134 Download, :176 OpenLocal, :212 load, :242 CloseVideo, :251 OutputFolder, :263 ChooseOutputFolder, :285 Export, :388 serveVideo</td><td>프론트 API, 작업 1개 보장, 진행률 이벤트, 미리보기 서빙</td></tr>
+              <tr><td>오류 문장</td><td><a href="../errors.go">errors.go</a> :17 문구, :49 downloadError, :77 exportError, :91 fileNameError</td><td>원인별 "원인 + 할 일" 한 문장, 원인은 로그로</td></tr>
+              <tr><td>다운로드</td><td><a href="../internal/download/download.go">download.go</a> :53 Args, :76 Download(403 재시도), :174 parser.line, :235 Classify · <a href="../internal/download/url.go">url.go</a> :17</td><td>yt-dlp 인자, 영상·소리 진행률 합산, 실패 분류, 주소 정규화</td></tr>
+              <tr><td>미디어</td><td><a href="../internal/media/filter.go">filter.go</a> :33 ToPixels, :67 MosaicFilter, :104 ExportArgs · <a href="../internal/media/probe.go">probe.go</a> :59 · <a href="../internal/media/run.go">run.go</a> :32</td><td>좌표 변환, 필터 문자열, ffprobe 파싱, ffmpeg 실행·진행률·실패 시 파일 삭제</td></tr>
+              <tr><td>프로세스</td><td><a href="../internal/tools/tools.go">tools.go</a> :69 Command · <a href="../internal/tools/proc_windows.go">proc_windows.go</a> :15 숨김, :27 Job Object, :69 Reveal</td><td>bin\ 경로, 콘솔 창 숨김, 트리 종료, stderr 로그</td></tr>
+              <tr><td>작업 관리</td><td><a href="../internal/job/job.go">job.go</a> :23 Begin, :55 CancelAndWait</td><td>동시 작업 1개, 취소, 종료 대기, ETA·전송 간격</td></tr>
+              <tr><td>경로·설정</td><td><a href="../internal/appdir/filename.go">filename.go</a> :32 CleanFileName, :67 OutputPath · <a href="../internal/appdir/settings.go">settings.go</a> :40 · <a href="../internal/appdir/desktop_windows.go">desktop_windows.go</a> :11</td><td>파일 이름 검사, 덮어쓰기 방지, 저장 폴더 기억, OneDrive 바탕화면</td></tr>
+              <tr><td>프론트 골격</td><td><a href="../frontend/src/wizard.js">wizard.js</a> :4 · <a href="../frontend/src/state.js">state.js</a> :17 setVideo, :28 resetAll, :39 checkRange · <a href="../frontend/src/api.js">api.js</a></td><td>마법사·이전/다음, 공유 상태, Go 호출 창구</td></tr>
+              <tr><td>프론트 단계</td><td><a href="../frontend/src/steps/load.js">load.js</a> · <a href="../frontend/src/steps/trim.js">trim.js</a> · <a href="../frontend/src/steps/mask.js">mask.js</a> · <a href="../frontend/src/steps/save.js">save.js</a></td><td>단계별 화면과 검증</td></tr>
+              <tr><td>프론트 영상</td><td><a href="../frontend/src/media/videoSource.js">videoSource.js</a> :7 openVideo, :19 closeVideo · <a href="../frontend/src/ui/player.js">player.js</a> :5 · <a href="../frontend/src/mask/overlay.js">overlay.js</a> :20</td><td>공유 video, 한글 버튼 플레이어, 가림 캔버스(비율 좌표)</td></tr>
+              <tr><td>개발 도구</td><td><a href="../cmd/devcli/main.go">cmd/devcli</a> · <a href="../scripts/fetch-tools.sh">fetch-tools.sh</a> · <a href="../scripts/package.sh">package.sh</a></td><td>UI 없는 기술 검증, 도구 받기, 배포 zip 만들기</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="decisions">
+        <h2>7. PRD 대비 결정·변경</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>PRD 원문과 다르게 구현했거나 PRD에 없던 결정. 결정 주체와 이유를 함께 기록.</caption>
+            <thead><tr><th>주제</th><th>PRD</th><th>현재</th><th>이유 / 결정 주체</th></tr></thead>
+            <tbody>
+              <tr><td>창 크기</td><td>1280×800 고정, 최대화만 허용</td><td>최대화로 시작, 최소 1024×600</td><td>1920×1080·150% 배율 PC에서 작업 표시줄이 "다음" 버튼을 가림 (실측). 개발 판단</td></tr>
+              <tr><td>URL 입력</td><td>"붙여넣기" 버튼</td><td>주소 칸 + "영상 받기", 칸에서 오른쪽 클릭·Ctrl+V</td><td>사용자 요청. 이를 위해 기본 컨텍스트 메뉴를 켜고 글자 칸 밖에서는 JS로 막음</td></tr>
+              <tr><td>좌표 전달</td><td>화면 표시 크기 + 사각형</td><td>레터박스를 뺀 영상 영역 기준 0–1 비율</td><td>object-fit: contain 여백 오차 제거, 미리보기 해상도와 무관</td></tr>
+              <tr><td>저장 파일</td><td>바탕화면, 고정 이름</td><td>이름 수정, 위치 바꾸기(다음 실행 때도 기억), 기본 바탕화면, 중복 시 <code>_2</code></td><td>사용자 요청. 기억 여부는 사용자가 명시</td></tr>
+              <tr><td>다운로드 형식</td><td><code>bv*[ext=mp4]</code></td><td><code>vcodec^=avc1</code> 우선</td><td>AV1 선택 시 WebView2 재생 실패 가능성</td></tr>
+              <tr><td>외부 도구</td><td>yt-dlp, ffmpeg, ffprobe</td><td>+ deno.exe</td><td>최신 yt-dlp의 YouTube 추출에 JS 런타임 필요</td></tr>
+              <tr><td>로컬 영상</td><td>MP4 선택</td><td>mp4·mov·m4v·mkv, H.264 8비트가 아니면 720p 미리보기 변환 (저장은 원본에서)</td><td>휴대폰 HEVC·10비트는 WebView2에서 재생 불가</td></tr>
+              <tr><td>배포 zip</td><td>zip 하나 (실행 파일 + bin\)</td><td>같은 구성, 단 <code>python3 -m zipfile</code>로 생성</td><td>Linux <code>zip</code>은 한글 이름을 Windows가 못 읽음 (실측)</td></tr>
+              <tr><td>안정성</td><td>-</td><td>403 재시도, 생방송 분류, 종료 시 정리 대기, 디스크 여유 확인</td><td>테스트·점검 중 발견</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="timeline">
+        <h2>8. 발견·수정 이력 (2026-09-28 KST)</h2>
+        <div class="table-scroll">
+          <table>
+            <caption>출처: 이 세션의 실행 로그, Windows 앱 로그(%LOCALAPPDATA%\운전영상편집기\logs\app.log), 코드 점검. 시각은 로그의 로컬 시각(KST).</caption>
+            <thead><tr><th>시점</th><th>관측</th><th>근거</th><th>조치</th></tr></thead>
+            <tbody>
+              <tr><td>13:16–13:19</td><td>1단계 기술 검증 통과 (WSL·Windows)</td><td>devcli 출력, ffprobe, 프레임 캡처</td><td>-</td></tr>
+              <tr><td>13:20 무렵</td><td>WebView2 원격 디버깅(CDP)을 열 수 없음</td><td>환경 변수, native loader, HKCU 정책 모두 무효</td><td>레지스트리 원복. 헤드리스 Chromium + 모의 백엔드로 UI 테스트</td></tr>
+              <tr><td>13:33</td><td>150% 배율에서 "다음" 버튼이 가려짐</td><td>Windows 창 캡처</td><td>최대화 시작</td></tr>
+              <tr><td>13:35:01</td><td>첫 다운로드 HTTP 403, 재시도는 성공</td><td>app.log <code>HTTP Error 403: Forbidden</code></td><td>403 자동 재시도(총 2회)</td></tr>
+              <tr><td>13:36</td><td>실제 앱 다운로드·재생·탐색 확인</td><td>app.log, 창 캡처</td><td>-</td></tr>
+              <tr><td>그 뒤</td><td>실제 마우스·클립보드 조작 테스트 중단</td><td>사용자 문의</td><td>이후 실제 앱 조작은 사용자가 직접</td></tr>
+              <tr><td>1차 점검</td><td>종료 시 미완성 파일 잔존, 생방송 오분류, "고른 부분 보기" 멈춤 오류, 단계마다 영상 재로딩(끊김)</td><td>코드 점검</td><td>CancelAndWait, ErrLive, stopAt, 공유 video</td></tr>
+              <tr><td>2차 점검</td><td>옛 "붙여넣기" 안내 문구, 이전 후 파일 이름 초기화, 완료 후 Enter 중복 저장, 슬라이더 오른쪽 클릭 새로고침, 재시도 로그</td><td>코드 점검 + staticcheck</td><td>모두 수정, 모의 UI 테스트 추가</td></tr>
+              <tr><td>15:16:51</td><td>첫 커밋 push</td><td><code>69bf6da</code> → origin/main</td><td>-</td></tr>
+              <tr><td>16:13</td><td>첫 배포 zip(182MB)을 Windows에서 풀지 못함: "경로에 잘못된 문자"</td><td>PowerShell 5.1 Expand-Archive 오류, zip 항목에 UTF-8 이름 플래그 없음</td><td><code>package.sh</code>를 <code>python3 -m zipfile</code>로 변경, 7개 항목 모두 UTF-8 플래그 확인</td></tr>
+              <tr><td>16:15–16:16</td><td>새 zip 압축 해제 → 앱 실행·업데이트·종료, 해당 bin\ 도구로 다운로드·저장 성공</td><td>app.log(<code>도구 폴더: …\ps\운전영상편집기\bin</code>, <code>===== 종료</code>), 창 캡처, devcli 결과</td><td>-</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="risks">
+        <h2>9. 남은 작업과 리스크</h2>
+        <div class="grid">
+          <div class="callout danger"><strong>우선 확인</strong>
+            <ul>
+              <li>최신 빌드를 실제 Windows 앱에서 끝까지 실행: 새 1단계, 저장 후 "이전" 시 영상 유지, 단계 전환 끊김, 이름·위치 저장</li>
+              <li>PRD 2단계 미검증 항목(인터넷 차단, 카카오톡·기본 플레이어, Shorts·비공개·삭제, 720p·세로 저장 대조)</li>
+            </ul>
+          </div>
+          <div class="callout warn"><strong>알려진 리스크</strong>
+            <ul>
+              <li>배포 크기: zip 182MB, 압축 해제 435MB (ffmpeg·ffprobe 정적 빌드 각 약 157MB, deno 약 93MB) → 공유 DLL 빌드 검토</li>
+              <li>YouTube 변경으로 yt-dlp가 깨질 수 있음. 설치 폴더에 쓰기 권한이 없으면 <code>-U</code> 실패(무시됨)</li>
+              <li>WebView2 CDP를 쓸 수 없어 실제 앱 자동 테스트 수단이 없음</li>
+              <li>서명 없는 exe라 인터넷·메신저로 받은 zip이면 첫 실행 때 SmartScreen 경고 가능 (로컬 복사 테스트에서는 미발생, 미검증)</li>
+              <li>yt-dlp.exe 백신 오탐 가능성 (미검증)</li>
+            </ul>
+          </div>
+          <div class="card"><strong>다음 단계</strong>
+            <ul>
+              <li>배포 zip을 다른 PC(또는 새 사용자 계정)에서 풀어 실행 (개발 PC 새 폴더에서는 확인함)</li>
+              <li>강사님 사용성 테스트 2회 연속 성공 (PRD 완료 기준)</li>
+              <li>i5급 PC에서 1080p 1분 저장 2분 이내 측정</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="build">
+        <h2>10. 개발·빌드 명령</h2>
+        <p>개발은 WSL(Linux)에서 하고, Windows용으로 크로스 빌드합니다. Linux용 Wails 앱 빌드에 필요한 GTK/WebKit 개발 패키지는 설치되어 있지 않지만, Windows 크로스 빌드와 바인딩 생성에는 필요하지 않습니다.</p>
+        <div class="table-scroll">
+          <table>
+            <caption>배포 구성 (2026-09-28 package.sh 실측). 압축은 문서·바탕화면처럼 쓰기 권한이 있는 폴더에 풀어야 yt-dlp 업데이트가 동작합니다.</caption>
+            <thead><tr><th>경로 (zip 안)</th><th>크기</th><th>역할</th><th>없으면</th></tr></thead>
+            <tbody>
+              <tr><td><code>운전영상편집기\운전영상편집기.exe</code></td><td>11MB</td><td>앱 본체, 화면(HTML/JS/CSS) 내장</td><td>-</td></tr>
+              <tr><td><code>bin\yt-dlp.exe</code> + <code>bin\deno.exe</code></td><td>17MB + 93MB</td><td>유튜브 다운로드, YouTube 추출용 JS 런타임</td><td>"프로그램 파일 일부가 없습니다" 안내</td></tr>
+              <tr><td><code>bin\ffmpeg.exe</code> + <code>bin\ffprobe.exe</code></td><td>157MB + 157MB</td><td>자르기·모자이크·저장, 영상 정보 조회 (정적 빌드, DLL 불필요)</td><td>같은 안내</td></tr>
+              <tr><td>(zip에 없음) WebView2 런타임</td><td>-</td><td>화면 표시. Windows 11 기본 포함, Windows 10도 대부분 설치됨</td><td>Wails 기본 설치 안내</td></tr>
+              <tr><td>(실행 중 생성) <code>%LOCALAPPDATA%\운전영상편집기\</code></td><td>작업량에 따라</td><td>work(7일 뒤 삭제), logs, settings.json</td><td>-</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="command-contract" data-command-contract="v1">
+          <h3 data-command-field="purpose">① 코드를 고친 뒤 바로: Go 단위 테스트 실행</h3>
+          <dl>
+            <dt>정확한 결과물</dt><dd data-command-field="artifact">결과물 없음. Go 1.25.5(linux/amd64)로 <code>internal/</code> 패키지 5개의 테스트를 빌드·실행만 합니다. 앱 빌드·실행·배포는 하지 않습니다.</dd>
+            <dt>대상·승인</dt><dd data-command-field="scope">사용자 또는 AI가 WSL의 저장소 루트에서 실행. 확인 창 없음. 대상은 <code>./internal/...</code> 패키지 5개.</dd>
+            <dt>READ</dt><dd data-command-field="read">저장소 Go 소스, go.mod/go.sum, Go 모듈 캐시, 테스트용 임시 폴더</dd>
+            <dt>CREATE</dt><dd data-command-field="create">임시: 테스트 임시 폴더(자동 삭제). 영속: Go 빌드 캐시 항목(~/.cache/go-build)</dd>
+            <dt>UPDATE</dt><dd data-command-field="update">없음</dd>
+            <dt>DELETE</dt><dd data-command-field="delete">자동: 테스트 임시 폴더. 영속 삭제: 없음</dd>
+            <dt>NO CHANGE</dt><dd data-command-field="no-change">저장소 파일, Windows 쪽 파일, %LOCALAPPDATA%, 설정·로그, 원격 저장소</dd>
+            <dt>성공</dt><dd data-command-field="success">모든 패키지 <code>ok</code>, 테스트 함수 19개 PASS. 외부 도구·네트워크를 쓰지 않습니다.</dd>
+            <dt>실패</dt><dd data-command-field="failure">잔여물 없음(임시 폴더는 정리됨). <code>FAIL</code> 패키지와 테스트 이름을 확인하고 멈춥니다.</dd>
+            <dt>재실행</dt><dd data-command-field="retry">몇 번이든 그대로 다시 실행해도 됩니다. 캐시된 결과는 <code>(cached)</code>로 표시됩니다.</dd>
+          </dl>
+          <p><strong>파라미터:</strong> <code>./internal/...</code>는 internal 아래 모든 패키지입니다. main 패키지는 Wails의 Linux cgo 의존성 때문에 빼고, <code>GOOS=windows go vet .</code>로 따로 검사합니다.</p>
+        </div>
+        <div class="terminal" data-copy-shell>
+          <div class="terminal-bar"><span>Terminal · 단위 테스트</span><button class="copy-icon" type="button" data-copy-kind="operational" data-copy-target="cmd-test" aria-label="단위 테스트 명령 복사" title="복사"><svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="10" height="10" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg><span class="copy-label">복사</span></button></div>
+          <pre id="cmd-test">go test ./internal/...</pre>
+        </div>
+
+        <div class="command-contract" data-command-contract="v1">
+          <h3 data-command-field="purpose">② Windows 실사용 테스트 전: 배포 폴더와 zip 만들기</h3>
+          <dl>
+            <dt>정확한 결과물</dt><dd data-command-field="artifact">
+              Windows 10/11 x64 GUI 실행 파일 <code>운전영상편집기.exe</code>(Go 1.25.5, Wails v2.16.0, <code>-trimpath -ldflags "-s -w"</code>, 프론트 Vite 빌드 내장) + <code>bin\</code>(yt-dlp.exe, ffmpeg.exe, ffprobe.exe, deno.exe).
+              실행하려면 대상 PC에 WebView2 런타임이 있어야 합니다. 설치 파일이나 코드 서명은 없습니다.
+              <strong>결과물을 만들기만 하고 실행·설치·배포하지 않습니다.</strong> 도구 버전은 <code>tools/windows/</code>에 이미 받아 둔 파일을 그대로 씁니다(2026-09-28 기준 yt-dlp 2026.08.19). 파일이 없으면 최신 릴리스를 새로 받습니다.
+            </dd>
+            <dt>대상·승인</dt><dd data-command-field="scope">사용자 또는 AI가 WSL의 저장소 루트에서 실행. 확인 창 없음. 대상은 저장소 안 <code>build/</code>, <code>frontend/</code>, <code>dist/운전영상편집기</code>, <code>dist/운전영상편집기.zip</code>.</dd>
+            <dt>READ</dt><dd data-command-field="read">저장소 소스, <code>tools/windows/*.exe</code>, npm 레지스트리(<code>npm install</code>), Go 모듈 캐시. 도구가 없으면 GitHub 릴리스. zip 생성에 WSL의 <code>python3</code> 필요.</dd>
+            <dt>CREATE</dt><dd data-command-field="create">임시: 없음. 영속: <code>build/bin/simpleEdit.exe</code>, <code>frontend/dist/</code>, <code>frontend/node_modules/</code>, <code>dist/운전영상편집기/</code>(exe + bin\), <code>dist/운전영상편집기.zip</code>. 도구가 없었다면 <code>tools/windows/</code>.</dd>
+            <dt>UPDATE</dt><dd data-command-field="update"><code>frontend/wailsjs/</code> 바인딩을 다시 생성합니다(Go API가 바뀌었으면 git 변경으로 나타남). <code>frontend/package.json.md5</code>도 갱신합니다(git 무시).</dd>
+            <dt>DELETE</dt><dd data-command-field="delete">자동: <code>-clean</code>으로 <code>build/bin/</code>를 비움. 영속 삭제: 이전 <code>dist/운전영상편집기/</code> 폴더와 이전 zip을 지우고 새로 만듭니다.</dd>
+            <dt>NO CHANGE</dt><dd data-command-field="no-change">Windows 테스트 폴더(%TEMP%\simpleEdit-test), %LOCALAPPDATA%\운전영상편집기(설정·로그·작업 파일), 원격 저장소, git 커밋</dd>
+            <dt>성공</dt><dd data-command-field="success">마지막 줄 <code>완료: …/dist/운전영상편집기</code>와 zip 크기 출력. 2026-09-28 실측: 약 48초, zip 182MB, 압축 해제 435MB, zip 안 한글 이름에 UTF-8 플래그. <code>dist/</code>는 git에서 무시됩니다.</dd>
+            <dt>실패</dt><dd data-command-field="failure"><code>set -euo pipefail</code>로 첫 오류에서 멈춥니다. 빌드 중 실패하면 이전 dist가 남습니다. dist 복사 중 실패하면 반쯤 만든 <code>dist/운전영상편집기/</code>가 남을 수 있으니, 다시 실행해 덮어씁니다.</dd>
+            <dt>재실행</dt><dd data-command-field="retry">같은 명령을 그대로 다시 실행하면 됩니다. 출력 경로는 고정이고 매번 새로 만듭니다.</dd>
+          </dl>
+          <p><strong>파라미터:</strong> 인자가 없으면 폴더와 zip을 만듭니다. <code>--no-zip</code>을 주면 폴더만 만듭니다(바로 복사해 실행해 볼 때). 스크립트 안의 <code>-platform windows/amd64</code>는 크로스 빌드 대상, <code>-clean</code>은 build/bin 정리입니다.</p>
+        </div>
+        <div class="terminal" data-copy-shell>
+          <div class="terminal-bar"><span>Terminal · 배포 zip 만들기</span><button class="copy-icon" type="button" data-copy-kind="operational" data-copy-target="cmd-package" aria-label="배포 명령 복사" title="복사"><svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="10" height="10" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg><span class="copy-label">복사</span></button></div>
+          <pre id="cmd-package">scripts/package.sh</pre>
+        </div>
+        <p class="copy-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="handoff">
+        <h2>11. 인수인계와 AI 실행 명세</h2>
+        <h3>인수인계 체크리스트</h3>
+        <ul class="checklist">
+          <li class="done">PRD F1–F5 구현, main에 push (69bf6da)</li>
+          <li class="done">PRD 1단계 기술 검증 4개 항목 통과</li>
+          <li class="done">두 차례 코드 점검(죽은 코드·논리 오류) 반영, staticcheck·주석 규칙 위반 0</li>
+          <li>최근 수정 사항을 실제 Windows 앱에서 사용자가 확인</li>
+          <li class="done"><code>scripts/package.sh</code>로 zip을 만들고 개발 PC의 새 폴더에 풀어 실행 확인</li>
+          <li>zip을 다른 PC(강사님 PC 또는 새 계정)에서 풀어 실행, SmartScreen·백신 반응 확인</li>
+          <li>PRD 2단계 미검증 4개 항목</li>
+          <li>강사님 사용성 테스트 2회 연속 성공</li>
+        </ul>
+        <details>
+          <summary>저장소 작업 규칙 (이번 세션에서 합의)</summary>
+          <ul>
+            <li>함수 안에는 주석을 두지 않고, 함수 밖 주석은 한 묶음 50자 이내로 씁니다.</li>
+            <li>프론트는 바닐라 JS를 쓰고 기능별 모듈로 나눕니다(steps, ui, mask, media, util).</li>
+            <li>사용자의 실제 마우스·클립보드·창 포커스를 조작하는 테스트는 먼저 허락을 받습니다. 스크린샷만 찍는 것은 괜찮습니다.</li>
+            <li>WSL에서 개발하고 Windows용으로 크로스 빌드해 Windows 쪽에서 실행을 확인합니다.</li>
+          </ul>
+        </details>
+        <div class="terminal" data-copy-shell>
+          <div class="terminal-bar"><span>Terminal · AI 실행 명세</span><button class="copy-icon" type="button" data-copy-kind="brief" data-copy-target="ai-execution-brief" aria-label="AI 실행 명세 복사" title="복사"><svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="10" height="10" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg><span class="copy-label">복사</span></button></div>
+          <pre id="ai-execution-brief">AI 실행 명세
+역할: SimpleEdit(운전 영상 편집기, Go + Wails v2) 유지보수 개발자
+목표: docs/PRD.md 8장의 남은 검증을 돕고, 사용자가 알려 준 문제를 고친다.
+이미 증명된 것:
+  - F1–F5 구현, PRD 1단계 기술 검증 4개 통과(WSL·Windows)
+  - Windows 앱에서 다운로드·미리보기·탐색 동작
+  - go test ./internal/... 19개 통과, staticcheck(GOOS=windows) 경고 0
+  - 모의 백엔드 UI 테스트 36개 항목 통과(가로·세로)
+먼저 확인:
+  1) git log로 최신 커밋, git status로 작업 트리 상태
+  2) docs/status_board.html 3장(미검증 항목)과 9장(리스크)
+  3) 사용자가 실제 Windows 앱에서 본 증상과 %LOCALAPPDATA%\운전영상편집기\logs\app.log
+허용:
+  - 저장소 코드 수정, go test / GOOS=windows go vet / wails build -platform windows/amd64
+  - Windows 테스트 폴더(C:\Users\...\AppData\Local\Temp\simpleEdit-test)로 exe 복사
+    (앱이 실행 중이면 복사하지 말고 사용자에게 알린다)
+  - 창 스크린샷만 찍는 확인
+금지:
+  - 사용자의 실제 마우스·키보드·클립보드·창 포커스 조작(허락 없이)
+  - 레지스트리 수정, 사용자 앱 강제 종료
+  - git push·커밋(사용자가 요청할 때만), main에 직접 강제 push
+  - PRD 7장 비범위 기능 추가
+저장소 규칙:
+  - 함수 안 주석 금지, 함수 밖 주석은 한 묶음 50자 이내
+  - 프론트는 바닐라 JS 기능별 모듈, Go와의 통신은 frontend/src/api.js로만
+  - 사용자 안내 문장은 "원인 + 할 일" 한 문장(errors.go)
+완료 보고 형식:
+  - 바꾼 파일과 이유, 실행한 검증 명령과 결과(통과/실패 수)
+  - 실제 Windows 앱에서 확인한 것과 확인하지 못한 것을 구분
+  - 커밋 여부</pre>
+        </div>
+      </section>
+
+      <section id="refs">
+        <h2>12. 참고와 증거 한계</h2>
+        <ul>
+          <li>요구사항: <a href="PRD.md">docs/PRD.md</a></li>
+          <li>코드 기준: 커밋 <code>69bf6da</code>(origin/main)와 그 뒤 <code>scripts/package.sh</code> zip 생성 방식 수정. 이 문서는 그 수정과 함께 커밋됩니다.</li>
+          <li>Windows 관측은 개발자 PC(1920×1080, 150% 배율, WebView2 153.0.4234.48) 한 대에서만 했습니다. 강사님 PC 환경은 확인하지 않았습니다.</li>
+          <li>모의 UI 테스트는 Linux 헤드리스 Chromium에서 VP9/WebM 테스트 영상으로 했습니다. H.264 재생과 WebView2 고유 동작은 검증 범위 밖입니다.</li>
+          <li>"사용자 직접 테스트 소감"은 세부 항목 기록 없이 전달된 의견입니다.</li>
+          <li>성능 수치(저장 시간)는 개발 PC 기준이라 PRD의 i5급 기준과 직접 비교할 수 없습니다.</li>
+          <li>이 문서에는 토큰, 비밀번호, 고객 데이터가 없습니다.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>SimpleEdit 상태판 · 2026-09-28 KST 작성 · 확정/미확정 구분은 실제 실행 관측 여부 기준 · 내부 개발 문서</footer>
+    <script>
+      (() => {
+        const status = document.querySelector('.copy-status');
+        document.querySelectorAll('[data-copy-target]').forEach((button) => button.addEventListener('click', async () => {
+          const idleLabel = button.getAttribute('aria-label') || '명령 복사';
+          const value = document.getElementById(button.dataset.copyTarget).textContent.trim();
+          let copied = false;
+          if (navigator.clipboard && window.isSecureContext) {
+            try { await navigator.clipboard.writeText(value); copied = true; } catch (_error) { copied = false; }
+          }
+          if (!copied) {
+            const area = document.createElement('textarea');
+            area.value = value;
+            area.setAttribute('readonly', '');
+            area.style.position = 'fixed';
+            area.style.opacity = '0';
+            document.body.appendChild(area);
+            area.focus();
+            area.select();
+            area.setSelectionRange(0, area.value.length);
+            copied = document.execCommand('copy');
+            area.remove();
+          }
+          if (!copied) { status.textContent = '복사에 실패했습니다. 직접 길게 눌러 복사하세요.'; return; }
+          const shell = button.closest('[data-copy-shell]');
+          const label = button.querySelector('.copy-label');
+          button.classList.add('copied');
+          shell?.classList.add('copied');
+          button.setAttribute('aria-label', '복사됨');
+          button.title = '복사됨';
+          if (label) label.textContent = '복사됨';
+          status.textContent = '클립보드에 복사했습니다.';
+          window.setTimeout(() => {
+            button.classList.remove('copied');
+            shell?.classList.remove('copied');
+            button.setAttribute('aria-label', idleLabel);
+            button.title = '복사';
+            if (label) label.textContent = '복사';
+          }, 2400);
+        }));
+      })();
+    </script>
+  </body>
+</html>

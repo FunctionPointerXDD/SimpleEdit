@@ -21,7 +21,8 @@ cp tools/windows/yt-dlp.exe tools/windows/ffmpeg.exe tools/windows/ffprobe.exe t
 
 if [ "${1:-}" != "--no-zip" ]; then
   rm -f "$root/dist/$name.zip"
-  (cd "$root/dist" && zip -qr -9 "$name.zip" "$name")
+  # zip 명령은 한글 이름에 UTF-8 표시가 없어 Windows에서 깨짐
+  (cd "$root/dist" && python3 -m zipfile -c "$name.zip" "$name")
   ls -lh "$root/dist/$name.zip"
 fi
 echo "완료: $out"
