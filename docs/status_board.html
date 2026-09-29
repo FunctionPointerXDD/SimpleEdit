@@ -274,25 +274,26 @@
     <header class="masthead">
       <div class="badges">
         <span class="badge">구현·검증 상태판</span>
-        <span class="badge">2026-09-28 KST 기준</span>
-        <span class="badge">코드 기준 e064c4a (main)</span>
-        <span class="badge warn">PRD 2·3단계 검증 진행 중</span>
+        <span class="badge">2026-09-29 KST 기준</span>
+        <span class="badge">main e064c4a · feature/auto-mask ea1c3ac</span>
+        <span class="badge warn">MVP 검증·2차 범위 P3 진행 중</span>
       </div>
       <h1>운전 영상 편집기 MVP 상태판</h1>
       <p class="deck">
-        PRD의 기능 5개(F1–F5)는 모두 구현되어 <code>main</code>에 push되었습니다. PRD 1단계 기술 검증 4개 항목은 WSL과 Windows에서 통과했고,
-        실제 Windows 앱에서는 다운로드 → 미리보기 → 탐색 → "여기서 시작"까지 직접 확인했습니다.
-        마지막 두 차례 수정(저장 위치·파일 이름, 영상 요소 재사용, 붙여넣기 버튼 제거)은 모의 백엔드 UI 테스트로만 검증했고, 실제 Windows 앱 재확인과 강사님 사용성 테스트(PRD 3단계)가 남아 있습니다.
+        MVP 기능 5개(F1–F5)는 <code>main</code>에 있습니다. 2차 범위(PRD 9장, 얼굴·번호판 자동 가리기)는 <code>feature/auto-mask</code> 브랜치에서 P0–P3까지 진행했습니다.
+        얼굴 자동 가리기, 소리 없애기, 오탐 거르기·트랙 빼기가 구현됐고, 사용자가 실제 Windows 앱에서 확인하며 신고한 건물 오탐 1건을 측정으로 원인을 확정해 고쳤습니다.
+        남은 큰 일은 번호판 모델 학습(P4), 사람이 라벨링한 검증 세트(PRD 9.6), 강사님 사용성 테스트입니다.
       </p>
     </header>
 
     <aside class="toc">
       <h2>SimpleEdit 상태판</h2>
-      <p>Go + Wails v2 · Windows 10/11 · 코드 기준 커밋 e064c4a</p>
+      <p>Go + Wails v2 · Windows 10/11 · feature/auto-mask ea1c3ac</p>
       <nav aria-label="문서 목차">
         <ol>
           <li><a href="#summary">현재 상태 요약</a></li>
           <li><a href="#features">PRD 기능 진행</a></li>
+          <li><a href="#auto">2차 범위: 자동 가리기</a></li>
           <li><a href="#tests">PRD 테스트 계획 진행</a></li>
           <li><a href="#architecture">구조와 데이터 흐름</a></li>
           <li><a href="#flow">사용자 흐름과 영상 수명</a></li>
@@ -311,17 +312,20 @@
       <section id="summary">
         <h2>1. 현재 상태 요약</h2>
         <div class="stats">
-          <div class="stat"><b>5 / 5</b><span>PRD 기능 구현 (F1–F5)</span></div>
-          <div class="stat"><b>4 / 4</b><span>PRD 1단계 기술 검증 통과</span></div>
-          <div class="stat"><b>2 / 5</b><span>PRD 2단계 기능 테스트 완료 (3개 부분·미검증)</span></div>
+          <div class="stat"><b>5 / 5</b><span>MVP 기능 구현 (F1–F5)</span></div>
+          <div class="stat"><b>P3</b><span>2차 범위 진행 (P0–P2 완료, P3 확인 중)</span></div>
+          <div class="stat"><b>54 × 2</b><span>모의 UI 테스트 항목 (가로·세로 모두 통과)</span></div>
           <div class="stat"><b>0 / 3</b><span>PRD 3단계 사용성 테스트</span></div>
         </div>
         <div class="grid">
           <div class="callout good"><strong>확정</strong>
             <ul>
-              <li>Go 단위 테스트 20개 통과, 실패 0 (<code>go test ./internal/...</code>, 패키지 5개)</li>
-              <li>staticcheck (Windows 대상 전체) 경고 0</li>
-              <li>모의 백엔드 UI 테스트 36개 항목 × 가로·세로 영상 모두 통과</li>
+              <li>Go 테스트 함수 49개 통과, 실패 0 (<code>go test ./internal/...</code>, 패키지 8개)</li>
+              <li>cgo Windows 대상 vet·staticcheck 경고 0, 주석 규칙 위반 0 (<code>scripts/qa/run.sh</code>)</li>
+              <li>모의 백엔드 UI 테스트 54개 항목 × 가로·세로 영상 모두 통과</li>
+              <li>YuNet Go 추론이 OpenCV 결과와 일치 (Linux·Windows, 좌표 차 0.00005px 이하)</li>
+              <li>배포 폴더의 onnxruntime.dll·VC++ 런타임 DLL이 <code>bin\</code>에서 로드됨 (Windows 모듈 목록)</li>
+              <li>사용자가 실제 앱에서 얼굴 가리기 동작 확인("꽤 잘 동작"), 신고한 건물 오탐 해결 확인(결과 프레임 9장)</li>
               <li>Windows 실제 앱에서 10분 1080p 유튜브 영상을 약 30초에 받아 재생·탐색 확인</li>
               <li>Windows에서 저장·취소, 취소 후 프로세스 잔존 0 확인 (devcli)</li>
               <li>배포 zip(182MB)을 Windows 기본 압축 해제로 풀어 실행, bin\ 도구 인식·업데이트·정상 종료 확인</li>
@@ -330,14 +334,15 @@
           </div>
           <div class="callout warn"><strong>미확정</strong>
             <ul>
-              <li>최근 수정(영상 요소 재사용, 저장 이름·위치, 붙여넣기 버튼 제거)의 실제 Windows 앱 동작</li>
+              <li>사람이 라벨링한 검증 세트 기준 얼굴 놓침 비율 (지금은 유사 정답 기준만 측정)</li>
+              <li>소리 없애기·트랙 빼기의 실제 Windows 앱 화면 동작 (모의 UI로만 확인)</li>
               <li>Shorts·비공개·삭제 영상 실제 주소에서의 안내</li>
               <li>인터넷 차단 상태 시작, 카카오톡 전송 재생</li>
               <li>i5급 사무용 PC에서의 저장 속도</li>
             </ul>
           </div>
           <div class="card"><strong>비범위 (PRD 7장)</strong>
-            <p>여러 구간 이어 붙이기, 시간대별·추적 모자이크, 자동 인식, MP4 외 형식, 설치 파일·코드 서명, 하드웨어 인코딩, macOS·다국어.</p>
+            <p>여러 구간 이어 붙이기, 수동 사각형의 시간대별 지정, 구간 일부만 소리 끄기, MP4 외 형식, 설치 파일·코드 서명, 하드웨어 인코딩, macOS·다국어. (자동 인식은 9장 2차 범위로 이동)</p>
           </div>
         </div>
       </section>
@@ -380,6 +385,12 @@
                 <td>인터넷 차단 상태 시작</td>
               </tr>
               <tr>
+                <td>추가</td><td>소리 없애기</td><td><span class="st info">구현 (브랜치)</span></td>
+                <td>3단계 "소리 없애기" 버튼, 저장 시 소리 트랙 제거(<code>-an</code>, 필터·파이프 모두), 미리보기 음소거, 4단계 요약 "소리: 없앰"</td>
+                <td><code>TestMuteRemovesAudio</code>(두 저장 경로 결과에 소리 트랙 없음), 모의 UI</td>
+                <td>실제 앱 화면</td>
+              </tr>
+              <tr>
                 <td>추가</td><td>안정성 보완</td><td><span class="st info">구현</span></td>
                 <td>403 자동 재시도(총 2회), 생방송 분류, 종료 시 미완성 파일 정리 대기(최대 5초), 단계 간 <code>&lt;video&gt;</code> 재사용, 최대화 시작</td>
                 <td><code>TestCancelAndWait</code>, 모의 UI "영상 파일 재요청 0회"</td>
@@ -390,8 +401,103 @@
         </div>
       </section>
 
+      <section id="auto">
+        <h2>3. 2차 범위: 자동 가리기 (feature/auto-mask)</h2>
+        <p>질문: "얼굴 박스는 어디서 만들어져 어디에 머물고, 저장할 때 어떻게 쓰이는가?"</p>
+        <figure class="diagram">
+          <svg viewBox="0 0 1100 430" role="img" aria-label="분석 단계에서 ffmpeg 축소 디코딩, YuNet 검출, 추적과 오탐 거르기를 거쳐 App 메모리에 트랙 번호가 붙은 박스를 두고, 확인 단계에서 프론트가 주황 박스를 보여 주고 뺄 트랙을 고르며, 저장 단계에서 원본 해상도 디코딩 프레임에 Go가 모자이크해 인코딩하는 흐름" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="x-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#155eef"/></marker>
+              <marker id="x-write" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b45309"/></marker>
+              <marker id="x-read" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#64748b"/></marker>
+              <style>
+                .row{fill:#eef4ff;stroke:#c7d7f5;stroke-width:1.5}
+                .rt{font:800 14px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#19376d}
+                .n{fill:#fff;stroke:#94a3b8;stroke-width:2}
+                .mem{fill:#fef9c3;stroke:#ca8a04;stroke-width:2}
+                .st{fill:#f0fdf4;stroke:#16a34a;stroke-width:2}
+                .t{font:700 13px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#172033}
+                .s{font:11px -apple-system,'Segoe UI','Malgun Gothic',sans-serif;fill:#475569}
+                .flow{stroke:#155eef;stroke-width:2.5;fill:none;marker-end:url(#x-flow)}
+                .write{stroke:#b45309;stroke-width:2.5;fill:none;marker-end:url(#x-write)}
+                .read{stroke:#64748b;stroke-width:2;fill:none;stroke-dasharray:4 4;marker-end:url(#x-read)}
+              </style>
+            </defs>
+            <rect class="row" x="8" y="8" width="1084" height="122" rx="10"/><text class="rt" x="20" y="28">① 분석 ("사람 얼굴 가리기")</text>
+            <rect class="row" x="8" y="148" width="1084" height="122" rx="10"/><text class="rt" x="20" y="168">② 확인 (3단계 화면)</text>
+            <rect class="row" x="8" y="288" width="1084" height="134" rx="10"/><text class="rt" x="20" y="308">③ 저장 ("저장하기")</text>
+
+            <rect class="st" x="20" y="40" width="180" height="76" rx="8"/><text class="t" x="32" y="64">원본 영상</text><text class="s" x="32" y="84">작업 폴더 또는 로컬 파일</text><text class="s" x="32" y="100">자른 구간만</text>
+            <rect class="n" x="235" y="40" width="190" height="76" rx="8"/><text class="t" x="247" y="64">ffmpeg 디코딩</text><text class="s" x="247" y="84">긴 변 640px, 고정 fps</text><text class="s" x="247" y="100">raw bgr24 (DecodeFrames)</text>
+            <rect class="n" x="460" y="40" width="190" height="76" rx="8"/><text class="t" x="472" y="64">YuNet 검출 (CPU)</text><text class="s" x="472" y="84">onnxruntime.dll + 모델</text><text class="s" x="472" y="100">초당 30번, 점수 0.4 이상</text>
+            <rect class="n" x="685" y="40" width="190" height="76" rx="8"/><text class="t" x="697" y="64">추적 (Track)</text><text class="s" x="697" y="84">보간 0.5초·유지 0.3초·40%</text><text class="s" x="697" y="100">큰 약한 트랙 버림</text>
+            <rect class="mem" x="905" y="40" width="175" height="76" rx="8"/><text class="t" x="917" y="64">App.auto (메모리)</text><text class="s" x="917" y="84">프레임별 박스</text><text class="s" x="917" y="100">+ 트랙 번호</text>
+
+            <rect class="n" x="905" y="180" width="175" height="76" rx="8"/><text class="t" x="917" y="204">프론트 state.auto</text><text class="s" x="917" y="224">[x,y,w,h,번호]</text><text class="s" x="917" y="240">소수 4자리 JSON</text>
+            <rect class="n" x="600" y="180" width="270" height="76" rx="8"/><text class="t" x="612" y="204">3단계 캔버스</text><text class="s" x="612" y="224">재생 시각(내림 프레임)의 주황 박스</text><text class="s" x="612" y="240">클릭 = 트랙 빼기/되살리기</text>
+            <rect class="n" x="235" y="180" width="330" height="76" rx="8"/><text class="t" x="247" y="204">저장 요청 (Export)</text><text class="s" x="247" y="224">auto(켜진 종류), exclude(뺀 트랙 번호)</text><text class="s" x="247" y="240">mute, rects(직접 가린 곳), 이름</text>
+
+            <rect class="st" x="20" y="325" width="180" height="76" rx="8"/><text class="t" x="32" y="349">원본 영상</text><text class="s" x="32" y="369">같은 구간</text>
+            <rect class="n" x="235" y="325" width="190" height="76" rx="8"/><text class="t" x="247" y="349">ffmpeg 디코딩</text><text class="s" x="247" y="369">원본 해상도, 같은 fps</text><text class="s" x="247" y="385">n번째 = 분석 n번째</text>
+            <rect class="n" x="460" y="325" width="190" height="76" rx="8"/><text class="t" x="472" y="349">Go 모자이크</text><text class="s" x="472" y="369">자동 박스(뺀 트랙 제외)</text><text class="s" x="472" y="385">+ 직접 가린 곳, 최대 8칸</text>
+            <rect class="n" x="685" y="325" width="190" height="76" rx="8"/><text class="t" x="697" y="349">ffmpeg 인코딩</text><text class="s" x="697" y="369">H.264 + 원본 소리</text><text class="s" x="697" y="385">소리 없애기면 -an</text>
+            <rect class="st" x="905" y="325" width="175" height="76" rx="8"/><text class="t" x="917" y="349">저장 폴더 MP4</text><text class="s" x="917" y="369">기본 바탕화면</text>
+
+            <path class="flow" d="M200 78 H235"/>
+            <path class="flow" d="M425 78 H460"/>
+            <path class="flow" d="M650 78 H685"/>
+            <path class="flow" d="M875 78 H905"/>
+            <path class="flow" d="M992 116 V180"/>
+            <path class="flow" d="M905 218 H870"/>
+            <path class="flow" d="M600 218 H565"/>
+            <path class="flow" d="M500 256 V325"/>
+            <path class="flow" d="M200 363 H235"/>
+            <path class="flow" d="M425 363 H460"/>
+            <path class="flow" d="M650 363 H685"/>
+            <path class="write" d="M875 363 H905"/>
+            <path class="read" d="M1085 90 H1092 V290 H640 V325"/>
+          </svg>
+          <figcaption data-diagram-explanation="v1">
+            위에서 아래로, 한 줄 안에서는 화살표를 따라 읽습니다. <strong>파란 실선</strong>은 데이터가 넘어가는 방향입니다. ① 분석은 줄인 프레임에서 얼굴을 찾고 추적해, 결과(트랙 번호가 붙은 프레임별 박스)를 <strong>Go 앱 메모리(App.auto, 노란 상자)</strong>에만 둡니다. DB나 파일에는 쓰지 않으며, 새 영상·새 편집·앱 종료 때 사라집니다.
+            ② 확인에서는 같은 결과를 줄인 JSON으로 프론트에 보내 주황 박스로 그리고, 사용자가 클릭한 트랙 번호를 저장 요청에 담습니다. 프론트는 App.auto를 바꾸지 않습니다.
+            ③ 저장에서 <strong>회색 점선</strong>은 Go 모자이크가 App.auto를 <strong>읽기만</strong> 하는 관계입니다. 분석과 같은 fps로 원본 해상도를 디코딩하므로 n번째 프레임이 분석의 n번째와 같은 장면이고, 저장할 때 검출을 다시 하지 않습니다. <strong>주황 실선</strong>은 유일한 파일 쓰기(저장 폴더 MP4)입니다. 원본 영상(초록)은 어느 단계에서도 수정되지 않습니다.
+            자동 가림을 쓰지 않으면 ③ 대신 기존 ffmpeg 필터 방식(5장 구조도)으로 저장합니다.
+          </figcaption>
+        </figure>
+
+        <h3>진행 상태 (PRD 9.5)</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>커밋은 feature/auto-mask 브랜치 기준</caption>
+            <thead><tr><th>단계</th><th>내용</th><th>상태</th><th>근거</th></tr></thead>
+            <tbody>
+              <tr><td>P0</td><td>결정·약관·브랜치·mingw</td><td><span class="st ok">완료</span></td><td>e64e67d: ONNX Runtime·YuNet·YOLOX 결정, AI Hub 보류, Roboflow CC BY 4.0 후보</td></tr>
+              <tr><td>P1</td><td>YuNet Go 추론</td><td><span class="st ok">완료</span></td><td>d73d95e: OpenCV 대조 얼굴 7개 일치 (Linux·Windows)</td></tr>
+              <tr><td>P2</td><td>프레임 파이프라인</td><td><span class="st ok">완료</span></td><td>7a661c3: 필터 방식과 같은 위치, 길이 ±0.2초, 1080p 60초 Windows 16.9초</td></tr>
+              <tr><td>P3</td><td>얼굴 분석·추적·확인 UI·저장</td><td><span class="st part">확인 중</span></td><td>a3fa314, ea1c3ac: 사용자 실사용 확인, 오탐 1건 수정. 남은 것: 9.6 검증 세트</td></tr>
+              <tr><td>P4–P6</td><td>번호판 학습·통합·깨끗한 PC 배포</td><td><span class="st no">미시작</span></td><td>Roboflow 데이터 다운로드(사용자 계정), 학습 환경 필요</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>확정 설정과 측정</h3>
+        <div class="table-scroll">
+          <table>
+            <caption>유사 정답 = 모든 프레임을 1280px로 검출한 결과. 검출기 자체가 못 찾는 얼굴은 포함되지 않음. 측정 도구: devcli facecheck</caption>
+            <thead><tr><th>항목</th><th>값</th><th>근거</th></tr></thead>
+            <tbody>
+              <tr><td>검출</td><td>초당 30번, 긴 변 640px, 점수 0.4</td><td>초당 15번 대비 놓침 1.17% → 0.11% (NASA 720p60)</td></tr>
+              <tr><td>추적</td><td>0.5초 보간, 앞뒤 0.3초 유지, 40% 확대</td><td>NASA 두 구간 놓침 0.02% / 0.04%</td></tr>
+              <tr><td>오탐 거르기</td><td>평균 폭 8% 이상 트랙은 0.7 이상 검출 필요</td><td>신고 영상 건물 트랙 21개 제거, NASA 놓침 0.02% / 0.06% 유지 (모든 트랙 0.7이면 2.36%로 악화)</td></tr>
+              <tr><td>모자이크</td><td>한 변 최대 8칸, 칸 최소 16px</td><td>가까운 얼굴도 알아볼 수 없게</td></tr>
+              <tr><td>속도 (개발 PC)</td><td>20초 720p60: 분석 약 6초·저장 약 6~7초 / 100초 1080p30: 각 약 31초 (WSL)</td><td>강사님 PC는 미측정</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="tests">
-        <h2>3. PRD 테스트 계획 진행 (8장)</h2>
+        <h2>4. PRD 테스트 계획 진행 (8장)</h2>
         <div class="table-scroll">
           <table>
             <caption>상태 기준: 완료 = 해당 조건을 실제로 실행해 관측, 부분 = 대체 수단(단위·모의 테스트)으로만 확인, 미검증 = 실행하지 않음.</caption>
@@ -415,7 +521,7 @@
       </section>
 
       <section id="architecture">
-        <h2>4. 구조와 데이터 흐름</h2>
+        <h2>5. 구조와 데이터 흐름</h2>
         <p>질문: "화면의 버튼 하나가 어떤 경로로 외부 도구를 실행하고, 결과 파일은 어디에 남는가?"</p>
         <figure class="diagram">
           <svg viewBox="0 0 1120 560" role="img" aria-label="프론트엔드가 Wails 바인딩으로 Go App을 호출하고, Go 내부 패키지가 yt-dlp와 ffmpeg를 숨김 실행해 작업 폴더와 저장 폴더에 파일을 쓰며, 진행률은 이벤트로, 미리보기는 HTTP Range로 돌아오는 구조" xmlns="http://www.w3.org/2000/svg">
@@ -486,12 +592,13 @@
             <strong>주황 실선</strong>은 파일 쓰기입니다. yt-dlp는 작업 폴더에, ffmpeg 저장 결과는 저장 폴더에 쓰고, <code>appdir</code>는 로그와 settings.json을 씁니다.
             <strong>회색 점선</strong>은 읽기 전용입니다. <code>&lt;video&gt;</code>가 <code>/video/current</code>를 Range 요청으로 읽고, <code>serveVideo</code>가 작업 폴더(또는 로컬 원본)의 미리보기 파일을 읽어 내보냅니다.
             영속 상태를 가진 곳은 초록 상자(작업 폴더, 저장 폴더, settings.json)뿐입니다. 원본 영상과 미리보기는 저장할 때 절대 수정되지 않고, 저장은 항상 원본에서 다시 인코딩합니다.
+            이 그림은 MVP(필터 방식 저장) 경로입니다. 자동 가리기의 분석·파이프 저장 경로는 3장 그림에 있습니다.
           </figcaption>
         </figure>
       </section>
 
       <section id="flow">
-        <h2>5. 사용자 흐름과 영상 수명</h2>
+        <h2>6. 사용자 흐름과 영상 수명</h2>
         <p>질문: "각 단계에서 '다음'은 언제 열리고, 불러온 영상은 언제 닫히는가?"</p>
         <figure class="diagram">
           <svg viewBox="0 0 1120 360" role="img" aria-label="4단계 마법사의 전진 조건과, 공유 video 요소 및 Go 원본 상태가 열리고 닫히는 시점" xmlns="http://www.w3.org/2000/svg">
@@ -557,31 +664,35 @@
       </section>
 
       <section id="codemap">
-        <h2>6. 코드 맵</h2>
+        <h2>7. 코드 맵</h2>
         <div class="table-scroll">
           <table>
-            <caption>경로는 저장소 루트 기준, 줄 번호는 커밋 e064c4a 기준. Go 비테스트 코드 약 2,020줄 (cmd 제외).</caption>
+            <caption>경로는 저장소 루트 기준, 줄 번호는 feature/auto-mask ea1c3ac 기준.</caption>
             <thead><tr><th>영역</th><th>파일 · 줄</th><th>책임</th></tr></thead>
             <tbody>
               <tr><td>진입점</td><td><a href="../main.go">main.go</a> :17</td><td>Wails 옵션(최대화 시작, 글자 칸 오른쪽 클릭 허용), AssetServer Handler 등록</td></tr>
-              <tr><td>바인딩</td><td><a href="../app.go">app.go</a> :134 Download, :176 OpenLocal, :212 load, :242 CloseVideo, :251 OutputFolder, :263 ChooseOutputFolder, :285 Export, :388 serveVideo</td><td>프론트 API, 작업 1개 보장, 진행률 이벤트, 미리보기 서빙</td></tr>
-              <tr><td>오류 문장</td><td><a href="../errors.go">errors.go</a> :16 문구, :50 downloadError, :78 exportError, :93 toolMissingError, :100 fileNameError</td><td>원인별 "원인 + 할 일" 한 문장, 원인은 로그로</td></tr>
+              <tr><td>바인딩</td><td><a href="../app.go">app.go</a> :145 Download, :187 OpenLocal, :223 load, :254 CloseVideo, :264 OutputFolder, :276 ChooseOutputFolder, :298 Export, :410 serveVideo</td><td>프론트 API, 작업 1개 보장, 진행률 이벤트, 미리보기 서빙</td></tr>
+              <tr><td>오류 문장</td><td><a href="../errors.go">errors.go</a> :16 문구, :54 downloadError, analyzeError, toolMissingError, fileNameError</td><td>원인별 "원인 + 할 일" 한 문장, 원인은 로그로</td></tr>
               <tr><td>다운로드</td><td><a href="../internal/download/download.go">download.go</a> :53 Args, :76 Download(403 재시도), :174 parser.line, :235 Classify · <a href="../internal/download/url.go">url.go</a> :17</td><td>yt-dlp 인자, 영상·소리 진행률 합산, 실패 분류, 주소 정규화</td></tr>
               <tr><td>미디어</td><td><a href="../internal/media/filter.go">filter.go</a> :33 ToPixels, :67 MosaicFilter, :104 ExportArgs · <a href="../internal/media/probe.go">probe.go</a> :59 · <a href="../internal/media/run.go">run.go</a> :32</td><td>좌표 변환, 필터 문자열, ffprobe 파싱, ffmpeg 실행·진행률·실패 시 파일 삭제</td></tr>
-              <tr><td>프로세스</td><td><a href="../internal/tools/tools.go">tools.go</a> :69 Command · <a href="../internal/tools/proc_windows.go">proc_windows.go</a> :15 숨김, :27 Job Object, :69 Reveal · <a href="../internal/tools/archive.go">archive.go</a> :10 RunningFromArchive</td><td>bin\ 경로, 콘솔 창 숨김, 트리 종료, stderr 로그, zip 안 실행 감지</td></tr>
+              <tr><td>자동 가리기 바인딩</td><td><a href="../automask_app.go">automask_app.go</a> :57 Analyze, :99 faceDetector, :136 autoFrames(뺀 트랙 제외), :44 toAutoMask</td><td>분석 작업·진행률, 검출기 1회 로드, 저장 구간 일치 확인</td></tr>
+              <tr><td>추적·분석</td><td><a href="../internal/automask/track.go">track.go</a> :69 Track, :100 required(크기별 기준), :164 Rects · <a href="../internal/automask/analyze.go">analyze.go</a> :33 OptionsFor, :56 Analyze, :69 Collect, :116 PixelateFunc</td><td>보간·유지·확대, 오탐 거르기, 트랙 번호, 모자이크 칸 크기</td></tr>
+              <tr><td>검출</td><td><a href="../internal/detect/yunet.go">yunet.go</a> :38 NewFaceDetector, :78 Detect, :113 decodeYuNet · <a href="../internal/detect/runtime.go">runtime.go</a> :21 Init(SetDllDirectory) · <a href="../internal/detect/frame.go">frame.go</a> :17 Letterbox</td><td>ONNX Runtime 세션, OpenCV와 같은 디코딩, 런타임 로드 실패 안내</td></tr>
+              <tr><td>프레임</td><td><a href="../internal/frame/frame.go">frame/frame.go</a> :36 Pixelate · <a href="../internal/media/pipe.go">media/pipe.go</a> :85 ProcessFrames, :139 DecodeFrames</td><td>bgr24 프레임, 칸 평균 모자이크, 디코딩→처리→인코딩 파이프</td></tr>
+              <tr><td>프로세스</td><td><a href="../internal/tools/tools.go">tools.go</a> :69 Command · <a href="../internal/tools/proc_windows.go">proc_windows.go</a> :15 숨김, :27 Job Object, :69 Reveal · <a href="../internal/tools/archive.go">archive.go</a> :10 RunningFromArchive · <a href="../internal/tools/models.go">models.go</a> :15 ORTLib, :23 ModelPath</td><td>bin\ 경로, 콘솔 창 숨김, 트리 종료, stderr 로그, zip 안 실행 감지, 런타임·모델 경로</td></tr>
               <tr><td>작업 관리</td><td><a href="../internal/job/job.go">job.go</a> :23 Begin, :55 CancelAndWait</td><td>동시 작업 1개, 취소, 종료 대기, ETA·전송 간격</td></tr>
               <tr><td>경로·설정</td><td><a href="../internal/appdir/filename.go">filename.go</a> :32 CleanFileName, :67 OutputPath · <a href="../internal/appdir/settings.go">settings.go</a> :40 · <a href="../internal/appdir/desktop_windows.go">desktop_windows.go</a> :11</td><td>파일 이름 검사, 덮어쓰기 방지, 저장 폴더 기억, OneDrive 바탕화면</td></tr>
-              <tr><td>프론트 골격</td><td><a href="../frontend/src/wizard.js">wizard.js</a> :4 · <a href="../frontend/src/state.js">state.js</a> :17 setVideo, :28 resetAll, :39 checkRange · <a href="../frontend/src/api.js">api.js</a></td><td>마법사·이전/다음, 공유 상태, Go 호출 창구</td></tr>
+              <tr><td>프론트 골격</td><td><a href="../frontend/src/wizard.js">wizard.js</a> :4 · <a href="../frontend/src/state.js">state.js</a> :19 setVideo, :45 setRange, :57 autoRectsAt, :72 toggleExcluded, :86 checkRange · <a href="../frontend/src/api.js">api.js</a></td><td>마법사·이전/다음, 공유 상태, Go 호출 창구</td></tr>
               <tr><td>프론트 단계</td><td><a href="../frontend/src/steps/load.js">load.js</a> · <a href="../frontend/src/steps/trim.js">trim.js</a> · <a href="../frontend/src/steps/mask.js">mask.js</a> · <a href="../frontend/src/steps/save.js">save.js</a></td><td>단계별 화면과 검증</td></tr>
-              <tr><td>프론트 영상</td><td><a href="../frontend/src/media/videoSource.js">videoSource.js</a> :7 openVideo, :19 closeVideo · <a href="../frontend/src/ui/player.js">player.js</a> :5 · <a href="../frontend/src/mask/overlay.js">overlay.js</a> :20</td><td>공유 video, 한글 버튼 플레이어, 가림 캔버스(비율 좌표)</td></tr>
-              <tr><td>개발 도구</td><td><a href="../cmd/devcli/main.go">cmd/devcli</a> · <a href="../scripts/fetch-tools.sh">fetch-tools.sh</a> · <a href="../scripts/package.sh">package.sh</a></td><td>UI 없는 기술 검증, 도구 받기, 배포 zip 만들기</td></tr>
+              <tr><td>프론트 영상</td><td><a href="../frontend/src/media/videoSource.js">videoSource.js</a> :7 openVideo, :19 closeVideo · <a href="../frontend/src/ui/player.js">player.js</a> :5 · <a href="../frontend/src/mask/overlay.js">overlay.js</a> :20 · <a href="../frontend/src/mask/autoPanel.js">autoPanel.js</a> · <a href="../frontend/src/mask/soundPanel.js">soundPanel.js</a></td><td>공유 video, 한글 버튼 플레이어, 가림 캔버스(직접·자동, 클릭 빼기), 자동 가리기·소리 패널</td></tr>
+              <tr><td>개발 도구</td><td><a href="../cmd/devcli/main.go">cmd/devcli</a>(<a href="../cmd/devcli/facecheck.go">facecheck</a>) · <a href="../cmd/cmtcheck/main.go">cmd/cmtcheck</a> · <a href="../scripts/qa/run.sh">scripts/qa/run.sh</a> · <a href="../scripts/fetch-tools.sh">fetch-tools.sh</a> · <a href="../scripts/package.sh">package.sh</a></td><td>UI 없는 검증·얼굴 설정 비교, 주석 규칙, 전체 검사, 도구 받기(windows·linux·ml·vcrt), 배포</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
       <section id="decisions">
-        <h2>7. PRD 대비 결정·변경</h2>
+        <h2>8. PRD 대비 결정·변경</h2>
         <div class="table-scroll">
           <table>
             <caption>PRD 원문과 다르게 구현했거나 PRD에 없던 결정. 결정 주체와 이유를 함께 기록.</caption>
@@ -596,6 +707,11 @@
               <tr><td>로컬 영상</td><td>MP4 선택</td><td>mp4·mov·m4v·mkv, H.264 8비트가 아니면 720p 미리보기 변환 (저장은 원본에서)</td><td>휴대폰 HEVC·10비트는 WebView2에서 재생 불가</td></tr>
               <tr><td>배포 zip</td><td>zip 하나 (실행 파일 + bin\)</td><td>같은 구성, 단 <code>python3 -m zipfile</code>로 생성</td><td>Linux <code>zip</code>은 한글 이름을 Windows가 못 읽음 (실측)</td></tr>
               <tr><td>압축 안 풀고 실행</td><td>-</td><td>도구가 없고 exe가 임시 폴더나 .zip 경로 안이면 "압축을 풀지 않고 실행하셨습니다 … 압축 풀기 후 실행" 안내</td><td>사용자 요청. 탐색기에서 zip 안 exe를 바로 실행하면 bin\ 없이 임시 폴더에서 실행됨</td></tr>
+              <tr><td>자동 인식</td><td>7장 비범위</td><td>9장 2차 범위로 이동, 브랜치에서 진행</td><td>사용자 결정 (2026-09-28)</td></tr>
+              <tr><td>추론 런타임·모델</td><td>(9장 초안) opencv/yolox 검토</td><td>ONNX Runtime 1.29.0 + YuNet(얼굴), YOLOX-Tiny(번호판, 예정)</td><td>사용자 결정. Apache-2.0·MIT만 사용</td></tr>
+              <tr><td>VC++ 런타임</td><td>-</td><td>DLL 4개를 bin\에 동봉, SetDllDirectory</td><td>onnxruntime.dll 의존성 발견 후 사용자 결정(방법 A)</td></tr>
+              <tr><td>소리</td><td>-</td><td>구간 전체 소리 없애기(-an)</td><td>사용자 요청 (2026-09-29)</td></tr>
+              <tr><td>좌표 보관</td><td>-</td><td>메모리만(App.auto), DB·파일 없음</td><td>편집 한 번 동안만 쓰이고 재분석이 빠름. 이어 하기가 필요해지면 작업 폴더 JSON</td></tr>
               <tr><td>안정성</td><td>-</td><td>403 재시도, 생방송 분류, 종료 시 정리 대기, 디스크 여유 확인</td><td>테스트·점검 중 발견</td></tr>
             </tbody>
           </table>
@@ -603,10 +719,10 @@
       </section>
 
       <section id="timeline">
-        <h2>8. 발견·수정 이력 (2026-09-28 KST)</h2>
+        <h2>9. 발견·수정 이력 (2026-09-28 ~ 09-29 KST)</h2>
         <div class="table-scroll">
           <table>
-            <caption>출처: 이 세션의 실행 로그, Windows 앱 로그(%LOCALAPPDATA%\운전영상편집기\logs\app.log), 코드 점검. 시각은 로그의 로컬 시각(KST).</caption>
+            <caption>출처: 실행 로그, Windows 앱 로그(%LOCALAPPDATA%\운전영상편집기\logs\app.log), 코드 점검, devcli 측정. 시각은 KST.</caption>
             <thead><tr><th>시점</th><th>관측</th><th>근거</th><th>조치</th></tr></thead>
             <tbody>
               <tr><td>13:16–13:19</td><td>1단계 기술 검증 통과 (WSL·Windows)</td><td>devcli 출력, ffprobe, 프레임 캡처</td><td>-</td></tr>
@@ -622,23 +738,34 @@
               <tr><td>16:15–16:16</td><td>새 zip 압축 해제 → 앱 실행·업데이트·종료, 해당 bin\ 도구로 다운로드·저장 성공</td><td>app.log(<code>도구 폴더: …\ps\운전영상편집기\bin</code>, <code>===== 종료</code>), 창 캡처, devcli 결과</td><td>-</td></tr>
               <tr><td>16:2x</td><td>zip 안 실행 감지 추가. Windows 실측 중 <code>%TEMP%</code>가 <code>C:\Users\ARTTAT~1\…</code>(8.3 짧은 이름)라 임시 폴더 비교가 항상 실패</td><td>감지 테스트 실행 파일을 Windows 4개 경로에서 실행</td><td><code>GetLongPathName</code>으로 긴 경로로 바꿔 비교. Temp1_…zip·7zO 경로 true, 문서 폴더 false 확인</td></tr>
               <tr><td>16:2x</td><td><code>.gitignore</code>의 <code>tools/</code>가 <code>internal/tools/</code>까지 제외, 69bf6da·d909c94에 해당 패키지 누락 (새로 받으면 빌드 불가)</td><td><code>git check-ignore</code>, <code>git ls-tree origin/main</code></td><td>규칙을 최상위 기준(<code>/tools/</code> 등)으로 수정, e064c4a에서 추가 후 새 clone 빌드·테스트 통과</td></tr>
+              <tr><td>09-28 P1</td><td>Go 레터박스 대조 중 7.8px 차이</td><td>대조 스크립트 반올림(426.5→426) 차이</td><td>스크립트를 맞춘 뒤 0.75px 이하</td></tr>
+              <tr><td>09-28 P2</td><td>파이프 테스트가 "사각형 밖 변경"으로 실패</td><td>재인코딩 잡음·testsrc2 무작위 잡음 (프레임 정렬은 정확)</td><td>칸 평균 판정, 잡음 없는 testsrc</td></tr>
+              <tr><td>09-28 P3</td><td>60fps 영상에서 얼굴 놓침 1.17%</td><td>유사 정답 비교</td><td>초당 30번 검출·점수 0.4·40% 확대 → 0.04%</td></tr>
+              <tr><td>09-28 점검</td><td>onnxruntime.dll이 VC++ 런타임에 의존, 종료 시 사용 중 세션 해제, 박스 프레임 반올림 등 6건</td><td>objdump, 코드 점검</td><td>VC++ DLL 동봉·로드 확인, 정리 대기 후 해제, 내림</td></tr>
+              <tr><td>09-29 오전</td><td>scratchpad(/tmp) 정리로 검사 도구 소실</td><td>빈 scratchpad</td><td>cmd/cmtcheck, scripts/qa로 저장소에 재작성</td></tr>
+              <tr><td>09-29</td><td>3단계 안내가 두 줄→한 줄로 바뀔 때 영상이 27px 움직임</td><td>모의 UI 좌표 어긋남</td><td>옆 패널 화면에서 안내 줄 두 줄 높이 고정</td></tr>
+              <tr><td>09-29</td><td>사용자 신고: 블랙박스 영상 2:20~4:00 왼쪽 건물이 계속 가려짐</td><td>건물 검출 점수 0.47~0.67·폭 10~16%, 강사 얼굴 0.92~0.94·폭 6% (devcli facecheck)</td><td>폭 8% 이상 트랙은 0.7 필요 + 클릭으로 트랙 빼기. 건물 트랙 21개 제거, 결과 프레임 확인</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
       <section id="risks">
-        <h2>9. 남은 작업과 리스크</h2>
+        <h2>10. 남은 작업과 리스크</h2>
         <div class="grid">
           <div class="callout danger"><strong>우선 확인</strong>
             <ul>
-              <li>최신 빌드를 실제 Windows 앱에서 끝까지 실행: 새 1단계, 저장 후 "이전" 시 영상 유지, 단계 전환 끊김, 이름·위치 저장</li>
+              <li>강사님 영상으로 사람이 라벨링한 검증 세트를 만들어 얼굴 놓침 측정 (PRD 9.6)</li>
+              <li>소리 없애기·트랙 빼기를 실제 앱에서 확인</li>
               <li>PRD 2단계 미검증 항목(인터넷 차단, 카카오톡·기본 플레이어, Shorts·비공개·삭제, 720p·세로 저장 대조)</li>
             </ul>
           </div>
           <div class="callout warn"><strong>알려진 리스크</strong>
             <ul>
-              <li>배포 크기: zip 182MB, 압축 해제 435MB (ffmpeg·ffprobe 정적 빌드 각 약 157MB, deno 약 93MB) → 공유 DLL 빌드 검토</li>
+              <li>배포 크기: zip 189MB (onnxruntime.dll 16MB, VC++ DLL 0.7MB 추가) → ffmpeg 공유 DLL 빌드 검토</li>
+              <li><strong>라이선스 미검토:</strong> 동봉한 ffmpeg는 GPL 빌드라 배포 시 소스 제공 의무 검토 필요. VC++ 런타임은 재배포 조건 확인 필요. 제3자 고지 파일 없음</li>
+              <li>폭 8% 미만의 작은 오탐은 남을 수 있음 (클릭으로 빼기)</li>
+              <li>얼굴 검출은 CPU만 사용. 강사님 PC 속도 미측정 (번호판 모델 추가 시 GPU(DirectML) 검토)</li>
               <li>YouTube 변경으로 yt-dlp가 깨질 수 있음. 설치 폴더에 쓰기 권한이 없으면 <code>-U</code> 실패(무시됨)</li>
               <li>WebView2 CDP를 쓸 수 없어 실제 앱 자동 테스트 수단이 없음</li>
               <li>서명 없는 exe라 인터넷·메신저로 받은 zip이면 첫 실행 때 SmartScreen 경고 가능 (로컬 복사 테스트에서는 미발생, 미검증)</li>
@@ -650,6 +777,8 @@
             <ul>
               <li>배포 zip을 다른 PC(또는 새 사용자 계정)에서 풀어 실행 (개발 PC 새 폴더에서는 확인함)</li>
               <li>강사님 사용성 테스트 2회 연속 성공 (PRD 완료 기준)</li>
+              <li>P4 번호판: Roboflow 데이터 받기(사용자 계정), YOLOX-Tiny 학습 환경(GPU 권장)</li>
+              <li>feature/auto-mask를 main에 합칠 시점 결정</li>
               <li>i5급 PC에서 1080p 1분 저장 2분 이내 측정</li>
             </ul>
           </div>
@@ -657,16 +786,17 @@
       </section>
 
       <section id="build">
-        <h2>10. 개발·빌드 명령</h2>
+        <h2>11. 개발·빌드 명령</h2>
         <p>개발은 WSL(Linux)에서 하고, Windows용으로 크로스 빌드합니다. Linux용 Wails 앱 빌드에 필요한 GTK/WebKit 개발 패키지는 설치되어 있지 않지만, Windows 크로스 빌드와 바인딩 생성에는 필요하지 않습니다.</p>
         <div class="table-scroll">
           <table>
-            <caption>배포 구성 (2026-09-28 package.sh 실측). 압축은 문서·바탕화면처럼 쓰기 권한이 있는 폴더에 풀어야 yt-dlp 업데이트가 동작합니다.</caption>
+            <caption>배포 구성 (2026-09-29 package.sh 실측, feature/auto-mask). 압축은 문서·바탕화면처럼 쓰기 권한이 있는 폴더에 풀어야 yt-dlp 업데이트가 동작합니다.</caption>
             <thead><tr><th>경로 (zip 안)</th><th>크기</th><th>역할</th><th>없으면</th></tr></thead>
             <tbody>
               <tr><td><code>운전영상편집기\운전영상편집기.exe</code></td><td>11MB</td><td>앱 본체, 화면(HTML/JS/CSS) 내장</td><td>-</td></tr>
               <tr><td><code>bin\yt-dlp.exe</code> + <code>bin\deno.exe</code></td><td>17MB + 93MB</td><td>유튜브 다운로드, YouTube 추출용 JS 런타임</td><td>"프로그램 파일 일부가 없습니다" 안내 (zip 안에서 바로 실행했으면 "압축을 풀지 않고 실행하셨습니다" 안내)</td></tr>
               <tr><td><code>bin\ffmpeg.exe</code> + <code>bin\ffprobe.exe</code></td><td>157MB + 157MB</td><td>자르기·모자이크·저장, 영상 정보 조회 (정적 빌드, DLL 불필요)</td><td>같은 안내</td></tr>
+              <tr><td><code>bin\onnxruntime.dll</code> + VC++ DLL 4개 + <code>bin\models\face_yunet_2023mar.onnx</code></td><td>16MB + 0.7MB + 0.2MB</td><td>얼굴 자동 가리기 (브랜치). DLL은 SetDllDirectory로 bin\에서 로드</td><td>얼굴 찾기 누를 때 파일 없음 안내, 런타임 로드 실패 시 VC++ 안내</td></tr>
               <tr><td>(zip에 없음) WebView2 런타임</td><td>-</td><td>화면 표시. Windows 11 기본 포함, Windows 10도 대부분 설치됨</td><td>Wails 기본 설치 안내</td></tr>
               <tr><td>(실행 중 생성) <code>%LOCALAPPDATA%\운전영상편집기\</code></td><td>작업량에 따라</td><td>work(7일 뒤 삭제), logs, settings.json</td><td>-</td></tr>
             </tbody>
@@ -674,41 +804,41 @@
         </div>
 
         <div class="command-contract" data-command-contract="v1">
-          <h3 data-command-field="purpose">① 코드를 고친 뒤 바로: Go 단위 테스트 실행</h3>
+          <h3 data-command-field="purpose">① 코드를 고친 뒤 커밋 전: 전체 검사 실행</h3>
           <dl>
-            <dt>정확한 결과물</dt><dd data-command-field="artifact">결과물 없음. Go 1.25.5(linux/amd64)로 <code>internal/</code> 패키지 5개의 테스트를 빌드·실행만 합니다. 앱 빌드·실행·배포는 하지 않습니다.</dd>
-            <dt>대상·승인</dt><dd data-command-field="scope">사용자 또는 AI가 WSL의 저장소 루트에서 실행. 확인 창 없음. 대상은 <code>./internal/...</code> 패키지 5개.</dd>
-            <dt>READ</dt><dd data-command-field="read">저장소 Go 소스, go.mod/go.sum, Go 모듈 캐시, 테스트용 임시 폴더</dd>
-            <dt>CREATE</dt><dd data-command-field="create">임시: 테스트 임시 폴더(자동 삭제). 영속: Go 빌드 캐시 항목(~/.cache/go-build)</dd>
-            <dt>UPDATE</dt><dd data-command-field="update">없음</dd>
+            <dt>정확한 결과물</dt><dd data-command-field="artifact">결과물 없음(검사만). Go 테스트(internal 8개 패키지), mingw cgo로 Windows 대상 go vet·staticcheck, Go·JS 주석 규칙, 프론트 Vite 빌드, 헤드리스 Chromium 모의 UI 테스트(가로·세로 각 54항목)를 차례로 실행합니다. 앱 설치·실행·배포는 하지 않습니다.</dd>
+            <dt>대상·승인</dt><dd data-command-field="scope">사용자 또는 AI가 WSL에서 실행. 확인 창 없음. 필요: Go 1.25, mingw-w64, ffmpeg, node, Playwright Chromium(~/.cache/ms-playwright).</dd>
+            <dt>READ</dt><dd data-command-field="read">저장소 소스, Go 모듈 캐시, npm 레지스트리(처음 한 번), Playwright Chromium, <code>tools/linux</code>(ffmpeg·onnxruntime·모델)</dd>
+            <dt>CREATE</dt><dd data-command-field="create">임시: 테스트 임시 폴더(자동 삭제). 영속: <code>scripts/qa/node_modules</code>, <code>scripts/qa/.cache</code>(테스트 영상, staticcheck, 스크린샷), <code>frontend/dist</code>, Go 빌드 캐시. 모두 git 무시</dd>
+            <dt>UPDATE</dt><dd data-command-field="update"><code>frontend/dist</code>를 새로 빌드합니다. 소스 파일은 바꾸지 않습니다.</dd>
             <dt>DELETE</dt><dd data-command-field="delete">자동: 테스트 임시 폴더. 영속 삭제: 없음</dd>
-            <dt>NO CHANGE</dt><dd data-command-field="no-change">저장소 파일, Windows 쪽 파일, %LOCALAPPDATA%, 설정·로그, 원격 저장소</dd>
-            <dt>성공</dt><dd data-command-field="success">모든 패키지 <code>ok</code>, 테스트 함수 20개 PASS. 외부 도구·네트워크를 쓰지 않습니다.</dd>
-            <dt>실패</dt><dd data-command-field="failure">잔여물 없음(임시 폴더는 정리됨). <code>FAIL</code> 패키지와 테스트 이름을 확인하고 멈춥니다.</dd>
-            <dt>재실행</dt><dd data-command-field="retry">몇 번이든 그대로 다시 실행해도 됩니다. 캐시된 결과는 <code>(cached)</code>로 표시됩니다.</dd>
+            <dt>NO CHANGE</dt><dd data-command-field="no-change">git 커밋, Windows 쪽 파일, %LOCALAPPDATA%, 원격 저장소</dd>
+            <dt>성공</dt><dd data-command-field="success">모든 패키지 <code>ok</code>, vet·staticcheck <code>ok</code>, 주석 규칙 <code>위반 0</code>, <code>wide: 통과 54/54</code>, <code>tall: 통과 54/54</code>. 종료 코드 0</dd>
+            <dt>실패</dt><dd data-command-field="failure">첫 실패 단계에서 멈추거나(Go·주석), UI 실패 항목만 출력하고 종료 코드 1. 잔여물은 위 캐시뿐이라 정리 불필요</dd>
+            <dt>재실행</dt><dd data-command-field="retry">몇 번이든 그대로 다시 실행해도 됩니다. 캐시는 재사용됩니다.</dd>
           </dl>
-          <p><strong>파라미터:</strong> <code>./internal/...</code>는 internal 아래 모든 패키지입니다. main 패키지는 Wails의 Linux cgo 의존성 때문에 빼고, <code>GOOS=windows go vet .</code>로 따로 검사합니다.</p>
+          <p><strong>파라미터:</strong> 없음. <code>CHROME</code> 환경 변수로 Chromium 경로를 바꿀 수 있습니다. UI 스크린샷은 <code>scripts/qa/.cache/shots/</code>에 남습니다.</p>
         </div>
         <div class="terminal" data-copy-shell>
-          <div class="terminal-bar"><span>Terminal · 단위 테스트</span><button class="copy-icon" type="button" data-copy-kind="operational" data-copy-target="cmd-test" aria-label="단위 테스트 명령 복사" title="복사"><svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="10" height="10" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg><span class="copy-label">복사</span></button></div>
-          <pre id="cmd-test">go test ./internal/...</pre>
+          <div class="terminal-bar"><span>Terminal · 전체 검사</span><button class="copy-icon" type="button" data-copy-kind="operational" data-copy-target="cmd-test" aria-label="전체 검사 명령 복사" title="복사"><svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="10" height="10" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg><span class="copy-label">복사</span></button></div>
+          <pre id="cmd-test">scripts/qa/run.sh</pre>
         </div>
 
         <div class="command-contract" data-command-contract="v1">
           <h3 data-command-field="purpose">② Windows 실사용 테스트 전: 배포 폴더와 zip 만들기</h3>
           <dl>
             <dt>정확한 결과물</dt><dd data-command-field="artifact">
-              Windows 10/11 x64 GUI 실행 파일 <code>운전영상편집기.exe</code>(Go 1.25.5, Wails v2.16.0, <code>-trimpath -ldflags "-s -w"</code>, 프론트 Vite 빌드 내장) + <code>bin\</code>(yt-dlp.exe, ffmpeg.exe, ffprobe.exe, deno.exe).
+              Windows 10/11 x64 GUI 실행 파일 <code>운전영상편집기.exe</code>(Go 1.25.5, Wails v2.16.0, <strong>cgo + mingw-w64</strong>, <code>-trimpath -ldflags "-s -w"</code>, 프론트 Vite 빌드 내장) + <code>bin\</code>(yt-dlp, ffmpeg, ffprobe, deno, onnxruntime.dll 1.29.0, VC++ 런타임 DLL 4개) + <code>bin\models\face_yunet_2023mar.onnx</code>.
               실행하려면 대상 PC에 WebView2 런타임이 있어야 합니다. 설치 파일이나 코드 서명은 없습니다.
               <strong>결과물을 만들기만 하고 실행·설치·배포하지 않습니다.</strong> 도구 버전은 <code>tools/windows/</code>에 이미 받아 둔 파일을 그대로 씁니다(2026-09-28 기준 yt-dlp 2026.08.19). 파일이 없으면 최신 릴리스를 새로 받습니다.
             </dd>
             <dt>대상·승인</dt><dd data-command-field="scope">사용자 또는 AI가 WSL의 저장소 루트에서 실행. 확인 창 없음. 대상은 저장소 안 <code>build/</code>, <code>frontend/</code>, <code>dist/운전영상편집기</code>, <code>dist/운전영상편집기.zip</code>.</dd>
-            <dt>READ</dt><dd data-command-field="read">저장소 소스, <code>tools/windows/*.exe</code>, npm 레지스트리(<code>npm install</code>), Go 모듈 캐시. 도구가 없으면 GitHub 릴리스. zip 생성에 WSL의 <code>python3</code> 필요.</dd>
+            <dt>READ</dt><dd data-command-field="read">저장소 소스, <code>tools/windows/</code>·<code>tools/models/</code>, npm 레지스트리, Go 모듈 캐시. 없으면 GitHub 릴리스(<code>fetch-tools.sh windows·ml</code>)와 <code>C:\Windows\System32</code>의 VC++ DLL(<code>fetch-tools.sh vcrt</code>). mingw-w64와 WSL <code>python3</code> 필요.</dd>
             <dt>CREATE</dt><dd data-command-field="create">임시: 없음. 영속: <code>build/bin/simpleEdit.exe</code>, <code>frontend/dist/</code>, <code>frontend/node_modules/</code>, <code>dist/운전영상편집기/</code>(exe + bin\), <code>dist/운전영상편집기.zip</code>. 도구가 없었다면 <code>tools/windows/</code>.</dd>
             <dt>UPDATE</dt><dd data-command-field="update"><code>frontend/wailsjs/</code> 바인딩을 다시 생성합니다(Go API가 바뀌었으면 git 변경으로 나타남). <code>frontend/package.json.md5</code>도 갱신합니다(git 무시).</dd>
             <dt>DELETE</dt><dd data-command-field="delete">자동: <code>-clean</code>으로 <code>build/bin/</code>를 비움. 영속 삭제: 이전 <code>dist/운전영상편집기/</code> 폴더와 이전 zip을 지우고 새로 만듭니다.</dd>
-            <dt>NO CHANGE</dt><dd data-command-field="no-change">Windows 테스트 폴더(%TEMP%\simpleEdit-test), %LOCALAPPDATA%\운전영상편집기(설정·로그·작업 파일), 원격 저장소, git 커밋</dd>
-            <dt>성공</dt><dd data-command-field="success">마지막 줄 <code>완료: …/dist/운전영상편집기</code>와 zip 크기 출력. 2026-09-28 실측: 약 48초, zip 182MB, 압축 해제 435MB, zip 안 한글 이름에 UTF-8 플래그. <code>dist/</code>는 git에서 무시됩니다.</dd>
+            <dt>NO CHANGE</dt><dd data-command-field="no-change">Windows 테스트 폴더(%TEMP%\simpleEdit-P3 등, 따로 복사해야 함), %LOCALAPPDATA%\운전영상편집기(설정·로그·작업 파일), 원격 저장소, git 커밋</dd>
+            <dt>성공</dt><dd data-command-field="success">마지막 줄 <code>완료: …/dist/운전영상편집기</code>와 zip 크기 출력. 2026-09-29 실측: zip 189MB, zip 안 한글 이름에 UTF-8 플래그. <code>dist/</code>는 git에서 무시됩니다.</dd>
             <dt>실패</dt><dd data-command-field="failure"><code>set -euo pipefail</code>로 첫 오류에서 멈춥니다. 빌드 중 실패하면 이전 dist가 남습니다. dist 복사 중 실패하면 반쯤 만든 <code>dist/운전영상편집기/</code>가 남을 수 있으니, 다시 실행해 덮어씁니다.</dd>
             <dt>재실행</dt><dd data-command-field="retry">같은 명령을 그대로 다시 실행하면 됩니다. 출력 경로는 고정이고 매번 새로 만듭니다.</dd>
           </dl>
@@ -722,13 +852,18 @@
       </section>
 
       <section id="handoff">
-        <h2>11. 인수인계와 AI 실행 명세</h2>
+        <h2>12. 인수인계와 AI 실행 명세</h2>
         <h3>인수인계 체크리스트</h3>
         <ul class="checklist">
           <li class="done">PRD F1–F5 구현, main에 push (최신 e064c4a, 새 clone 빌드 확인)</li>
           <li class="done">PRD 1단계 기술 검증 4개 항목 통과</li>
           <li class="done">두 차례 코드 점검(죽은 코드·논리 오류) 반영, staticcheck·주석 규칙 위반 0</li>
-          <li>최근 수정 사항을 실제 Windows 앱에서 사용자가 확인</li>
+          <li class="done">2차 범위 P0–P2 완료, P3 얼굴 자동 가리기 구현 (feature/auto-mask ea1c3ac)</li>
+          <li class="done">사용자 실사용 확인, 신고된 건물 오탐 원인 확정·수정</li>
+          <li>소리 없애기·트랙 빼기 실제 앱 확인</li>
+          <li>PRD 9.6 검증 세트(사람 라벨) 측정</li>
+          <li>P4 번호판 모델 (Roboflow 데이터, 학습 환경)</li>
+          <li>ffmpeg GPL·VC++ 재배포 라이선스 검토와 제3자 고지 파일</li>
           <li class="done"><code>scripts/package.sh</code>로 zip을 만들고 개발 PC의 새 폴더에 풀어 실행 확인</li>
           <li>zip을 다른 PC(강사님 PC 또는 새 계정)에서 풀어 실행, SmartScreen·백신 반응 확인</li>
           <li>zip 안의 exe를 바로 더블클릭 → "영상 받기"로 압축 풀기 안내 문구 화면 확인</li>
@@ -741,33 +876,35 @@
             <li>함수 안에는 주석을 두지 않고, 함수 밖 주석은 한 묶음 50자 이내로 씁니다.</li>
             <li>프론트는 바닐라 JS를 쓰고 기능별 모듈로 나눕니다(steps, ui, mask, media, util).</li>
             <li>사용자의 실제 마우스·클립보드·창 포커스를 조작하는 테스트는 먼저 허락을 받습니다. 스크린샷만 찍는 것은 괜찮습니다.</li>
-            <li>WSL에서 개발하고 Windows용으로 크로스 빌드해 Windows 쪽에서 실행을 확인합니다.</li>
+            <li>WSL에서 개발하고 Windows용으로 크로스 빌드해 Windows 쪽에서 실행을 확인합니다(cgo, mingw-w64).</li>
+            <li>2차 범위는 feature/auto-mask 브랜치에서 진행하고, 커밋·push는 사용자가 요청할 때 합니다.</li>
+            <li>검사 도구는 저장소에 둡니다(scratchpad는 /tmp라 지워짐). 커밋 전에 <code>scripts/qa/run.sh</code>.</li>
           </ul>
         </details>
         <div class="terminal" data-copy-shell>
           <div class="terminal-bar"><span>Terminal · AI 실행 명세</span><button class="copy-icon" type="button" data-copy-kind="brief" data-copy-target="ai-execution-brief" aria-label="AI 실행 명세 복사" title="복사"><svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="10" height="10" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg><span class="copy-label">복사</span></button></div>
           <pre id="ai-execution-brief">AI 실행 명세
 역할: SimpleEdit(운전 영상 편집기, Go + Wails v2) 유지보수 개발자
-목표: docs/PRD.md 8장의 남은 검증을 돕고, 사용자가 알려 준 문제를 고친다.
+목표: PRD 8장(MVP)·9장(2차 범위)의 남은 작업을 돕고, 사용자가 알려 준 문제를 고친다.
 이미 증명된 것:
-  - F1–F5 구현, PRD 1단계 기술 검증 4개 통과(WSL·Windows)
-  - Windows 앱에서 다운로드·미리보기·탐색 동작
-  - go test ./internal/... 20개 통과, staticcheck(GOOS=windows) 경고 0
-  - 모의 백엔드 UI 테스트 36개 항목 통과(가로·세로)
+  - F1–F5 구현(main), 2차 범위 P0–P3(feature/auto-mask)
+  - YuNet Go 추론 = OpenCV, 얼굴 놓침(유사 정답) 0.02~0.06%
+  - scripts/qa/run.sh 전체 통과(Go 49개, vet·staticcheck, 주석, UI 54×2)
 먼저 확인:
-  1) git log로 최신 커밋, git status로 작업 트리 상태
-  2) docs/status_board.html 3장(미검증 항목)과 9장(리스크)
-  3) 사용자가 실제 Windows 앱에서 본 증상과 %LOCALAPPDATA%\운전영상편집기\logs\app.log
+  1) git branch·log·status (2차 범위는 feature/auto-mask)
+  2) docs/status_board.html 3장(자동 가리기), 10장(리스크)
+  3) 얼굴 오탐·놓침 신고면: devcli facecheck &lt;영상&gt; &lt;시작&gt; &lt;끝&gt;로 먼저 측정
+  4) 사용자가 실제 Windows 앱에서 본 증상과 %LOCALAPPDATA%\운전영상편집기\logs\app.log
 허용:
-  - 저장소 코드 수정, go test / GOOS=windows go vet / wails build -platform windows/amd64
-  - Windows 테스트 폴더(C:\Users\...\AppData\Local\Temp\simpleEdit-test)로 exe 복사
+  - 저장소 코드 수정, scripts/qa/run.sh, scripts/package.sh (cgo·mingw)
+  - Windows 테스트 폴더(C:\Users\...\AppData\Local\Temp\simpleEdit-P3)로 빌드 복사
     (앱이 실행 중이면 복사하지 말고 사용자에게 알린다)
   - 창 스크린샷만 찍는 확인
 금지:
   - 사용자의 실제 마우스·키보드·클립보드·창 포커스 조작(허락 없이)
   - 레지스트리 수정, 사용자 앱 강제 종료
   - git push·커밋(사용자가 요청할 때만), main에 직접 강제 push
-  - PRD 7장 비범위 기능 추가
+  - PRD 7장 비범위 기능 추가, 상업 이용이 자유롭지 않은 데이터 사용(AI Hub 보류)
 저장소 규칙:
   - 함수 안 주석 금지, 함수 밖 주석은 한 묶음 50자 이내
   - 프론트는 바닐라 JS 기능별 모듈, Go와의 통신은 frontend/src/api.js로만
@@ -780,10 +917,11 @@
       </section>
 
       <section id="refs">
-        <h2>12. 참고와 증거 한계</h2>
+        <h2>13. 참고와 증거 한계</h2>
         <ul>
           <li>요구사항: <a href="PRD.md">docs/PRD.md</a></li>
-          <li>코드 기준: 커밋 <code>e064c4a</code>(origin/main). 69bf6da·d909c94는 <code>internal/tools</code>가 빠져 있어 단독으로는 빌드되지 않습니다.</li>
+          <li>코드 기준: main <code>e064c4a</code>, feature/auto-mask <code>ea1c3ac</code>. 69bf6da·d909c94는 <code>internal/tools</code>가 빠져 있어 단독으로는 빌드되지 않습니다.</li>
+          <li>얼굴 측정은 유사 정답(같은 검출기, 1280px) 기준입니다. NASA 퍼블릭 도메인 영상 2구간과 사용자 신고 영상 1구간만 측정했습니다.</li>
           <li>Windows 관측은 개발자 PC(1920×1080, 150% 배율, WebView2 153.0.4234.48) 한 대에서만 했습니다. 강사님 PC 환경은 확인하지 않았습니다.</li>
           <li>모의 UI 테스트는 Linux 헤드리스 Chromium에서 VP9/WebM 테스트 영상으로 했습니다. H.264 재생과 WebView2 고유 동작은 검증 범위 밖입니다.</li>
           <li>"사용자 직접 테스트 소감"은 세부 항목 기록 없이 전달된 의견입니다.</li>
@@ -793,7 +931,7 @@
       </section>
     </main>
 
-    <footer>SimpleEdit 상태판 · 2026-09-28 KST 작성 · 확정/미확정 구분은 실제 실행 관측 여부 기준 · 내부 개발 문서</footer>
+    <footer>SimpleEdit 상태판 · 2026-09-29 KST 갱신 · 확정/미확정 구분은 실제 실행 관측 여부 기준 · 내부 개발 문서</footer>
     <script>
       (() => {
         const status = document.querySelector('.copy-status');
