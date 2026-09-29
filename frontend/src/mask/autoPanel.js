@@ -33,7 +33,7 @@ export function createAutoPanel({ctx, guide, player, onChange}) {
     function statusText(a) {
         if (!a.enabled) return '얼굴 가리기를 꺼 두었습니다.';
         if (a.result.found === 0) return '얼굴을 찾지 못했습니다. 필요하면 네모를 직접 그리세요.';
-        return '찾은 얼굴을 주황색 네모로 표시했습니다. 재생해서 빠진 얼굴이 있는지 확인하세요.';
+        return '찾은 얼굴을 주황 네모로 표시했습니다. 잘못 가린 곳은 주황 네모를 눌러 빼세요.';
     }
 
     async function run(kind) {
@@ -45,10 +45,10 @@ export function createAutoPanel({ctx, guide, player, onChange}) {
         off = api.onProgress('analyze', (p) => progress.update(p));
         try {
             const result = await api.analyze({kind, start: state.start, end: state.end});
-            state.auto[kind] = {result, enabled: true};
+            state.auto[kind] = {result, enabled: true, excluded: []};
             guide.set(result.found > 0
-                ? `${KINDS[kind].name}을 찾았습니다. 재생해서 주황색 네모가 ${KINDS[kind].name}을 잘 따라가는지 확인하세요.`
-                : `${KINDS[kind].name}을 찾지 못했습니다. 필요하면 마우스로 네모를 그려 가리세요.`,
+                ? `${KINDS[kind].name}을 찾았습니다. 재생해서 주황 네모가 잘 따라가는지 보세요.`
+                : `${KINDS[kind].name}을 찾지 못했습니다. 필요하면 네모를 직접 그리세요.`,
             result.found > 0 ? 'success' : 'info');
         } catch (e) {
             const text = api.errorText(e);

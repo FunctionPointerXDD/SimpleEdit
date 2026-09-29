@@ -44,21 +44,33 @@ func OptionsFor(fps float64) Options {
 
 // Result는 구간의 프레임별 자동 박스다. 좌표는 0~1 비율
 type Result struct {
-	Start    float64        `json:"start"`
-	Duration float64        `json:"duration"`
-	FPS      float64        `json:"fps"`
-	Frames   [][]media.Rect `json:"frames"`
-	Found    int            `json:"found"`
+	Start    float64      `json:"start"`
+	Duration float64      `json:"duration"`
+	FPS      float64      `json:"fps"`
+	Frames   [][]TrackBox `json:"frames"`
+	Found    int          `json:"found"`
+	Stats    TrackStats   `json:"-"`
 }
 
 // Analyze는 줄인 프레임에서 검출하고 추적 결과를 만든다.
 func Analyze(ctx context.Context, s media.PipeSpec, det Detector, o Options, onProgress media.ProgressFunc) (Result, error) {
+	samples, frames, found, err := Collect(ctx, s, det, o, onProgress)
+	if err != nil {
+		return Result{}, err
+	}
+	boxes, stats := Track(samples, frames, o.Track)
+	return Result{
+		Start: s.Start, Duration: s.Duration, FPS: s.FPS,
+		Frames: boxes, Found: found, Stats: stats,
+	}, nil
+}
+
+// Collect는 검출만 모은다. 추적 설정 비교용으로도 쓴다.
+func Collect(ctx context.Context, s media.PipeSpec, det Detector, o Options, onProgress media.ProgressFunc) (samples []Sample, frames, found int, err error) {
 	ds := s
 	ds.Width, ds.Height = detectSize(s.Width, s.Height, o.DetectSize)
 	total := s.FrameCount()
-	var samples []Sample
-	found, frames := 0, 0
-	err := media.DecodeFrames(ctx, ds, func(n int, f frame.Frame) error {
+	err = media.DecodeFrames(ctx, ds, func(n int, f frame.Frame) error {
 		frames = n + 1
 		if onProgress != nil {
 			onProgress(min(0.99, float64(n+1)/float64(total)))
@@ -71,19 +83,13 @@ func Analyze(ctx context.Context, s media.PipeSpec, det Detector, o Options, onP
 			return err
 		}
 		found += len(boxes)
-		samples = append(samples, Sample{Frame: n, Boxes: normalize(boxes, f.W, f.H)})
+		samples = append(samples, Sample{Frame: n, Dets: normalize(boxes, f.W, f.H)})
 		return nil
 	})
-	if err != nil {
-		return Result{}, err
-	}
-	if onProgress != nil {
+	if err == nil && onProgress != nil {
 		onProgress(1)
 	}
-	return Result{
-		Start: s.Start, Duration: s.Duration, FPS: s.FPS,
-		Frames: Track(samples, frames, o.Track), Found: found,
-	}, nil
+	return samples, frames, found, err
 }
 
 // detectSize는 긴 변을 limit 이하로, 짝수로 줄인다.
@@ -95,13 +101,13 @@ func detectSize(w, h, limit int) (int, int) {
 	return int(math.Round(float64(w)*k)) &^ 1, int(math.Round(float64(h)*k)) &^ 1
 }
 
-func normalize(boxes []detect.Box, w, h int) []media.Rect {
-	out := make([]media.Rect, len(boxes))
+func normalize(boxes []detect.Box, w, h int) []Det {
+	out := make([]Det, len(boxes))
 	for i, b := range boxes {
-		out[i] = media.Rect{
+		out[i] = Det{Score: b.Score, Box: media.Rect{
 			X: float64(b.X) / float64(w), Y: float64(b.Y) / float64(h),
 			W: float64(b.W) / float64(w), H: float64(b.H) / float64(h),
-		}
+		}}
 	}
 	return out
 }

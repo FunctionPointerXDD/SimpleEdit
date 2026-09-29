@@ -7,6 +7,7 @@ export const state = {
     end: 0,
     rects: [],
     auto: {},
+    mute: false,
     fileName: '',
     savedPath: '',
 };
@@ -22,6 +23,7 @@ export function setVideo(video) {
     state.end = Math.floor(video.duration * 10) / 10;
     state.rects = [];
     state.auto = {};
+    state.mute = false;
     state.fileName = '';
     state.savedPath = '';
 }
@@ -34,6 +36,7 @@ export function resetAll() {
     state.end = 0;
     state.rects = [];
     state.auto = {};
+    state.mute = false;
     state.fileName = '';
     state.savedPath = '';
 }
@@ -50,16 +53,33 @@ export function enabledAuto() {
     return Object.keys(state.auto).filter((k) => state.auto[k].enabled);
 }
 
-// 시각 t 화면 프레임(내림)의 자동 박스 [x,y,w,h]들
+// 시각 t 화면 프레임(내림)의 자동 박스와 뺀 여부
 export function autoRectsAt(t) {
     const out = [];
     for (const kind of enabledAuto()) {
-        const r = state.auto[kind].result;
+        const a = state.auto[kind];
+        const r = a.result;
         const n = Math.floor((t - r.start) * r.fps + 1e-3);
         if (n < 0 || n >= r.frames.length) continue;
-        for (const [x, y, w, h] of r.frames[n] || []) out.push({x, y, w, h});
+        for (const [x, y, w, h, id] of r.frames[n] || []) {
+            out.push({x, y, w, h, id, kind, excluded: a.excluded.includes(id)});
+        }
     }
     return out;
+}
+
+// 자동 트랙 하나를 빼거나 되살린다. 뺐으면 true
+export function toggleExcluded(kind, id) {
+    const a = state.auto[kind];
+    const i = a.excluded.indexOf(id);
+    if (i >= 0) a.excluded.splice(i, 1);
+    else a.excluded.push(id);
+    return i < 0;
+}
+
+// 저장 요청용: 종류별로 뺀 트랙 번호
+export function autoExclusions() {
+    return Object.fromEntries(enabledAuto().map((k) => [k, [...state.auto[k].excluded]]));
 }
 
 // 구간 검사. ok가 false면 message에 안내

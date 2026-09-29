@@ -21,6 +21,7 @@ type PipeSpec struct {
 	FPS      float64
 	Width    int
 	Height   int
+	Mute     bool
 }
 
 // FrameFunc는 n번째 프레임을 제자리에서 고친다.
@@ -57,23 +58,25 @@ func DecodeArgs(s PipeSpec) []string {
 // EncodeArgs는 stdin 원시 프레임과 원본 소리로 MP4를 만든다.
 func EncodeArgs(s PipeSpec, output string) []string {
 	w, h := s.evenSize()
-	return []string{
+	args := []string{
 		"-hide_banner", "-nostdin", "-loglevel", "error", "-y",
 		"-f", "rawvideo", "-pix_fmt", "bgr24",
 		"-s", fmt.Sprintf("%dx%d", w, h),
 		"-framerate", rate(s.FPS),
 		"-i", "pipe:0",
-		"-ss", secs(s.Start),
-		"-t", secs(s.Duration),
-		"-i", s.Source,
-		"-map", "0:v:0", "-map", "1:a:0?",
+	}
+	if !s.Mute {
+		args = append(args, "-ss", secs(s.Start), "-t", secs(s.Duration), "-i", s.Source)
+	}
+	args = append(args, "-map", "0:v:0")
+	args = append(args, audioArgs(s.Mute, 1)...)
+	return append(args,
 		"-t", secs(s.Duration),
 		"-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
 		"-pix_fmt", "yuv420p",
-		"-c:a", "aac", "-b:a", "160k",
 		"-movflags", "+faststart",
 		output,
-	}
+	)
 }
 
 func rate(fps float64) string { return strconv.FormatFloat(fps, 'f', 6, 64) }

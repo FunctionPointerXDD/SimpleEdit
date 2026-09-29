@@ -30,24 +30,24 @@ type AnalyzeRequest struct {
 	End   float64 `json:"end"`
 }
 
-// AutoMask는 프론트 표시용 프레임별 박스 [x,y,w,h]다.
+// AutoMask는 프론트 표시용 박스 [x,y,w,h,트랙 번호]다.
 type AutoMask struct {
 	Kind     string         `json:"kind"`
 	Start    float64        `json:"start"`
 	Duration float64        `json:"duration"`
 	FPS      float64        `json:"fps"`
 	Found    int            `json:"found"`
-	Frames   [][][4]float32 `json:"frames"`
+	Frames   [][][5]float32 `json:"frames"`
 }
 
 // toAutoMask는 JSON을 줄이려고 소수 4자리 배열로 바꾼다.
 func toAutoMask(kind string, r automask.Result) AutoMask {
 	round := func(v float64) float32 { return float32(math.Round(v*1e4) / 1e4) }
-	frames := make([][][4]float32, len(r.Frames))
+	frames := make([][][5]float32, len(r.Frames))
 	for n, boxes := range r.Frames {
-		frames[n] = make([][4]float32, len(boxes))
+		frames[n] = make([][5]float32, len(boxes))
 		for i, b := range boxes {
-			frames[n][i] = [4]float32{round(b.X), round(b.Y), round(b.W), round(b.H)}
+			frames[n][i] = [5]float32{round(b.Rect.X), round(b.Rect.Y), round(b.Rect.W), round(b.Rect.H), float32(b.ID)}
 		}
 	}
 	return AutoMask{Kind: kind, Start: r.Start, Duration: r.Duration, FPS: r.FPS, Found: r.Found, Frames: frames}
@@ -132,8 +132,8 @@ func (a *App) closeDetectors() {
 	}
 }
 
-// autoFrames는 켜진 종류의 프레임별 박스를 합친다.
-func (a *App) autoFrames(kinds []string, start, end float64) ([][]media.Rect, error) {
+// autoFrames는 켜진 종류에서 뺀 트랙을 빼고 합친다.
+func (a *App) autoFrames(kinds []string, exclude map[string][]int, start, end float64) ([][]media.Rect, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	var merged [][]media.Rect
@@ -142,10 +142,14 @@ func (a *App) autoFrames(kinds []string, start, end float64) ([][]media.Rect, er
 		if !ok || !sameRange(res, start, end) {
 			return nil, errStaleAuto
 		}
+		skip := map[int]bool{}
+		for _, id := range exclude[k] {
+			skip[id] = true
+		}
 		for len(merged) < len(res.Frames) {
 			merged = append(merged, nil)
 		}
-		for n, boxes := range res.Frames {
+		for n, boxes := range automask.Rects(res.Frames, skip) {
 			merged[n] = append(merged[n], boxes...)
 		}
 	}

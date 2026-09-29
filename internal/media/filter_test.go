@@ -85,3 +85,14 @@ func TestExportArgs(t *testing.T) {
 		t.Errorf("모자이크 인자 이상: %v", masked)
 	}
 }
+
+func TestExportArgsMute(t *testing.T) {
+	args := ExportArgs(ExportSpec{Source: "in.mp4", Output: "out.mp4", Duration: 5, Mute: true})
+	if !slices.Contains(args, "-an") || slices.Contains(args, "aac") || slices.Contains(args, "0:a:0?") {
+		t.Errorf("무음 인자 이상: %v", args)
+	}
+	enc := EncodeArgs(PipeSpec{Source: "in.mp4", Duration: 5, FPS: 30, Width: 64, Height: 64, Mute: true}, "out.mp4")
+	if !slices.Contains(enc, "-an") || slices.Contains(enc, "in.mp4") {
+		t.Errorf("무음 파이프는 원본을 입력으로 열지 않아야 함: %v", enc)
+	}
+}

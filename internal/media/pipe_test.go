@@ -209,3 +209,31 @@ func TestProcessFramesOddSize(t *testing.T) {
 		t.Errorf("크기 %dx%d, want 320x240", info.Width, info.Height)
 	}
 }
+
+func TestMuteRemovesAudio(t *testing.T) {
+	useTools(t)
+	src := makeSource(t, 160, 120, 3)
+	s := probeSpec(t, src, 0.5, 2)
+	s.Mute = true
+	dir := t.TempDir()
+	pipeOut := filepath.Join(dir, "pipe.mp4")
+	filterOut := filepath.Join(dir, "filter.mp4")
+	if err := ProcessFrames(context.Background(), s, pipeOut, func(int, frame.Frame) error { return nil }, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := Export(context.Background(), ExportSpec{Source: src, Output: filterOut, Start: 0.5, Duration: 2, Mute: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{pipeOut, filterOut} {
+		info, err := Probe(context.Background(), p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.HasAudio {
+			t.Errorf("%s: 소리 트랙이 남음", filepath.Base(p))
+		}
+		if d := info.Duration - 2; d < -0.2 || d > 0.2 {
+			t.Errorf("%s: 길이 %.3f초", filepath.Base(p), info.Duration)
+		}
+	}
+}

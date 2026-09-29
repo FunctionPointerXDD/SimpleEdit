@@ -49,11 +49,13 @@ type VideoInfo struct {
 
 // ExportRequest의 사각형은 영상 영역 기준 0~1 비율.
 type ExportRequest struct {
-	Start    float64      `json:"start"`
-	End      float64      `json:"end"`
-	Rects    []media.Rect `json:"rects"`
-	FileName string       `json:"fileName"`
-	Auto     []string     `json:"auto"`
+	Start    float64          `json:"start"`
+	End      float64          `json:"end"`
+	Rects    []media.Rect     `json:"rects"`
+	FileName string           `json:"fileName"`
+	Auto     []string         `json:"auto"`
+	Mute     bool             `json:"mute"`
+	Exclude  map[string][]int `json:"exclude"`
 }
 
 // ProgressEvent의 Remaining은 남은 초, 모르면 -1.
@@ -313,7 +315,7 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	}
 	var auto [][]media.Rect
 	if len(req.Auto) > 0 {
-		if auto, err = a.autoFrames(req.Auto, start, end); err != nil {
+		if auto, err = a.autoFrames(req.Auto, req.Exclude, start, end); err != nil {
 			return "", userError(msgAutoStale, err)
 		}
 	}
@@ -329,16 +331,18 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	}
 	out := appdir.OutputPath(outDir, name)
 	rects := media.RectsToPixels(req.Rects, info.Width, info.Height)
-	applog.Printf("저장: %.2f~%.2f초, 사각형 %v, 자동 %v → %s", start, end, rects, req.Auto, out)
+	applog.Printf("저장: %.2f~%.2f초, 사각형 %v, 자동 %v, 무음 %v → %s", start, end, rects, req.Auto, req.Mute, out)
 
 	emit := a.progressEmitter(evExportProgress)
 	emit(0, "export")
 	progress := func(f float64) { emit(f, "export") }
 	if auto != nil {
-		err = exportAuto(ctx, pipeSpec(source, info, start, end), out, req.Rects, auto, progress)
+		spec := pipeSpec(source, info, start, end)
+		spec.Mute = req.Mute
+		err = exportAuto(ctx, spec, out, req.Rects, auto, progress)
 	} else {
 		err = media.Export(ctx, media.ExportSpec{
-			Source: source, Output: out, Start: start, Duration: end - start, Rects: rects,
+			Source: source, Output: out, Start: start, Duration: end - start, Rects: rects, Mute: req.Mute,
 		}, progress)
 	}
 	if err != nil {

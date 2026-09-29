@@ -17,7 +17,7 @@ function contentBox(video) {
 }
 
 // 끌어 그린 사각형(비율)과 자동 박스(주황)를 그린다.
-export function createMaskOverlay({video, getRects, getAuto, canAdd, onAdd, onBlocked, onStart}) {
+export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd, onAdd, onBlocked, onStart}) {
     const off = new AbortController();
     const on = (target, type, fn) => target.addEventListener(type, fn, {signal: off.signal});
     const canvas = h('canvas.mask-canvas');
@@ -48,9 +48,17 @@ export function createMaskOverlay({video, getRects, getAuto, canAdd, onAdd, onBl
         if (!drag) return;
         const box = contentBox(video);
         const r = dragRect();
+        const at = {x: drag.x1, y: drag.y1};
         drag = null;
         if (r.w * box.w >= MIN_DRAG_PX && r.h * box.h >= MIN_DRAG_PX) onAdd(r);
+        else clickAuto(at);
         draw();
+    }
+
+    function clickAuto(p) {
+        const hit = (getAuto?.(video.currentTime) || []).find((b) =>
+            p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h);
+        if (hit) onAutoClick?.(hit);
     }
 
     function draw() {
@@ -68,6 +76,10 @@ export function createMaskOverlay({video, getRects, getAuto, canAdd, onAdd, onBl
 
         for (const r of getAuto?.(video.currentTime) || []) {
             const [x, y, w, hh] = toPx(r);
+            if (r.excluded) {
+                drawExcluded(x, y, w, hh);
+                continue;
+            }
             drawMosaicHint(x, y, w, hh);
             ctx2d.lineWidth = 3;
             ctx2d.strokeStyle = '#ff9500';
@@ -89,6 +101,21 @@ export function createMaskOverlay({video, getRects, getAuto, canAdd, onAdd, onBl
             ctx2d.strokeRect(x, y, w, hh);
             ctx2d.setLineDash([]);
         }
+    }
+
+    function drawExcluded(x, y, w, hh) {
+        ctx2d.setLineDash([6, 6]);
+        ctx2d.lineWidth = 2;
+        ctx2d.strokeStyle = 'rgba(200,200,200,0.9)';
+        ctx2d.strokeRect(x, y, w, hh);
+        ctx2d.setLineDash([]);
+        ctx2d.font = 'bold 16px "Malgun Gothic", sans-serif';
+        ctx2d.textAlign = 'left';
+        ctx2d.textBaseline = 'top';
+        ctx2d.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx2d.fillRect(x, y, 44, 22);
+        ctx2d.fillStyle = '#fff';
+        ctx2d.fillText('빠짐', x + 5, y + 3);
     }
 
     function drawMosaicHint(x, y, w, hh) {

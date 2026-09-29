@@ -98,6 +98,7 @@ type ExportSpec struct {
 	Start    float64 // 초
 	Duration float64 // 초
 	Rects    []PixelRect
+	Mute     bool
 }
 
 // ExportArgs는 저장용 ffmpeg 인자. yuv420p로 호환성 확보
@@ -113,11 +114,10 @@ func ExportArgs(s ExportSpec) []string {
 	} else {
 		args = append(args, "-map", "0:v:0")
 	}
+	args = append(args, audioArgs(s.Mute, 0)...)
 	args = append(args,
-		"-map", "0:a:0?",
 		"-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
 		"-pix_fmt", "yuv420p",
-		"-c:a", "aac", "-b:a", "160k",
 		"-movflags", "+faststart",
 		"-progress", "pipe:1", "-nostats",
 		s.Output,
@@ -139,6 +139,14 @@ func PreviewArgs(source, output string) []string {
 		"-progress", "pipe:1", "-nostats",
 		output,
 	}
+}
+
+// audioArgs는 input번 입력의 소리를 AAC로 넣거나 뺀다.
+func audioArgs(mute bool, input int) []string {
+	if mute {
+		return []string{"-an"}
+	}
+	return []string{"-map", strconv.Itoa(input) + ":a:0?", "-c:a", "aac", "-b:a", "160k"}
 }
 
 func secs(v float64) string { return strconv.FormatFloat(v, 'f', 3, 64) }

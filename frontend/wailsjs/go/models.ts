@@ -44,6 +44,8 @@ export namespace main {
 	    rects: media.Rect[];
 	    fileName: string;
 	    auto: string[];
+	    mute: boolean;
+	    exclude: Record<string, Array<number>>;
 	
 	    static createFrom(source: any = {}) {
 	        return new ExportRequest(source);
@@ -56,6 +58,8 @@ export namespace main {
 	        this.rects = this.convertValues(source["rects"], media.Rect);
 	        this.fileName = source["fileName"];
 	        this.auto = source["auto"];
+	        this.mute = source["mute"];
+	        this.exclude = source["exclude"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

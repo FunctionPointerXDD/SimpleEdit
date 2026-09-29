@@ -58,6 +58,13 @@ func main() {
 	case "analyze":
 		need(6)
 		err = analyze(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]))
+	case "facecheck":
+		need(5)
+		gtScore := float32(0.6)
+		if len(os.Args) > 5 {
+			gtScore = float32(num(os.Args[5]))
+		}
+		err = facecheck(ctx, os.Args[2], num(os.Args[3]), num(os.Args[4]), gtScore, os.Getenv("VERBOSE") != "")
 	case "cancel":
 		need(5)
 		c, cancel := context.WithTimeout(ctx, time.Duration(num(os.Args[4])*float64(time.Second)))
@@ -156,7 +163,7 @@ func analyze(ctx context.Context, src, out string, start, end float64) error {
 		return err
 	}
 	t1 := time.Now()
-	err = media.ProcessFrames(ctx, spec, out, automask.PixelateFunc(nil, res.Frames), func(f float64) { fmt.Printf("\r저장 %5.1f%%   ", f*100) })
+	err = media.ProcessFrames(ctx, spec, out, automask.PixelateFunc(nil, automask.Rects(res.Frames, nil)), func(f float64) { fmt.Printf("\r저장 %5.1f%%   ", f*100) })
 	fmt.Println()
 	if err == nil {
 		fmt.Printf("저장 %.1f초: %s\n", time.Since(t1).Seconds(), out)
@@ -197,6 +204,7 @@ func usage() {
   devcli export <원본> <출력> <시작초> <끝초> [x,y,w,h ...]
   devcli pipe <원본> <출력> <시작초> <끝초> [x,y,w,h ...]
   devcli analyze <원본> <출력> <시작초> <끝초>
+  devcli facecheck <원본> <시작초> <끝초> [정답 점수=0.6]
   devcli cancel <원본> <출력> <초>
   devcli update`)
 	os.Exit(2)

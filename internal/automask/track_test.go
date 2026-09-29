@@ -7,9 +7,26 @@ import (
 	"simpleEdit/internal/media"
 )
 
-var noExpand = TrackOptions{MatchIoU: 0.2, MaxGap: 6, Hold: 2, Expand: 0}
+var noExpand = TrackOptions{MatchIoU: 0.2, MaxGap: 6, Hold: 2, Expand: 0, Strong: 0.7, Weak: 0.7}
 
 func rect(x, y, w, h float64) media.Rect { return media.Rect{X: x, Y: y, W: w, H: h} }
+
+// strong은 강한 점수 검출 목록을 만든다.
+func strong(rs ...media.Rect) []Det { return withScore(0.9, rs...) }
+
+func withScore(score float32, rs ...media.Rect) []Det {
+	out := make([]Det, len(rs))
+	for i, r := range rs {
+		out[i] = Det{Box: r, Score: score}
+	}
+	return out
+}
+
+// trackRects는 뺀 트랙 없이 사각형으로 바꿔 돌려준다.
+func trackRects(samples []Sample, frames int, o TrackOptions) ([][]media.Rect, TrackStats) {
+	boxes, st := Track(samples, frames, o)
+	return Rects(boxes, nil), st
+}
 
 func nearRect(a, b media.Rect) bool {
 	return math.Abs(a.X-b.X) < 1e-9 && math.Abs(a.Y-b.Y) < 1e-9 &&
@@ -18,10 +35,10 @@ func nearRect(a, b media.Rect) bool {
 
 func TestTrackInterpolatesBetweenSamples(t *testing.T) {
 	samples := []Sample{
-		{Frame: 2, Boxes: []media.Rect{rect(0.10, 0.10, 0.2, 0.2)}},
-		{Frame: 4, Boxes: []media.Rect{rect(0.14, 0.10, 0.2, 0.2)}},
+		{Frame: 2, Dets: strong(rect(0.10, 0.10, 0.2, 0.2))},
+		{Frame: 4, Dets: strong(rect(0.14, 0.10, 0.2, 0.2))},
 	}
-	out := Track(samples, 10, noExpand)
+	out, _ := trackRects(samples, 10, noExpand)
 	want := map[int]media.Rect{
 		0: rect(0.10, 0.10, 0.2, 0.2), 1: rect(0.10, 0.10, 0.2, 0.2),
 		2: rect(0.10, 0.10, 0.2, 0.2), 3: rect(0.12, 0.10, 0.2, 0.2),
@@ -45,10 +62,10 @@ func TestTrackInterpolatesBetweenSamples(t *testing.T) {
 func TestTrackKeepsTwoFacesSeparate(t *testing.T) {
 	a, b := rect(0.1, 0.1, 0.1, 0.1), rect(0.7, 0.1, 0.1, 0.1)
 	samples := []Sample{
-		{Frame: 0, Boxes: []media.Rect{a, b}},
-		{Frame: 2, Boxes: []media.Rect{rect(0.72, 0.1, 0.1, 0.1), rect(0.12, 0.1, 0.1, 0.1)}},
+		{Frame: 0, Dets: strong(a, b)},
+		{Frame: 2, Dets: strong(rect(0.72, 0.1, 0.1, 0.1), rect(0.12, 0.1, 0.1, 0.1))},
 	}
-	out := Track(samples, 3, noExpand)
+	out, _ := trackRects(samples, 3, noExpand)
 	if len(out[1]) != 2 {
 		t.Fatalf("1번 프레임 박스 %d개: %v", len(out[1]), out[1])
 	}
@@ -61,10 +78,10 @@ func TestTrackKeepsTwoFacesSeparate(t *testing.T) {
 
 func TestTrackLongGapDoesNotBridge(t *testing.T) {
 	samples := []Sample{
-		{Frame: 0, Boxes: []media.Rect{rect(0.1, 0.1, 0.2, 0.2)}},
-		{Frame: 20, Boxes: []media.Rect{rect(0.1, 0.1, 0.2, 0.2)}},
+		{Frame: 0, Dets: strong(rect(0.1, 0.1, 0.2, 0.2))},
+		{Frame: 20, Dets: strong(rect(0.1, 0.1, 0.2, 0.2))},
 	}
-	out := Track(samples, 25, noExpand)
+	out, _ := trackRects(samples, 25, noExpand)
 	if len(out[10]) != 0 {
 		t.Errorf("MaxGap보다 긴 공백을 이으면 안 됨: %v", out[10])
 	}
@@ -74,24 +91,92 @@ func TestTrackLongGapDoesNotBridge(t *testing.T) {
 }
 
 func TestTrackExpandsAndClips(t *testing.T) {
-	out := Track([]Sample{{Frame: 0, Boxes: []media.Rect{rect(0, 0.4, 0.2, 0.2)}}}, 1,
-		TrackOptions{MatchIoU: 0.2, MaxGap: 6, Hold: 0, Expand: 0.5})
-	got := out[0][0]
-	if !nearRect(got, rect(0, 0.35, 0.25, 0.3)) {
+	out, _ := trackRects([]Sample{{Frame: 0, Dets: strong(rect(0, 0.4, 0.2, 0.2))}}, 1,
+		TrackOptions{MatchIoU: 0.2, MaxGap: 6, Hold: 0, Expand: 0.5, Strong: 0.7, Weak: 0.7})
+	if got := out[0][0]; !nearRect(got, rect(0, 0.35, 0.25, 0.3)) {
 		t.Errorf("확대·자르기 = %v", got)
 	}
 }
 
 func TestTrackDoesNotReorderInput(t *testing.T) {
 	samples := []Sample{
-		{Frame: 4, Boxes: []media.Rect{rect(0.1, 0.1, 0.2, 0.2)}},
-		{Frame: 0, Boxes: []media.Rect{rect(0.1, 0.1, 0.2, 0.2)}},
+		{Frame: 4, Dets: strong(rect(0.1, 0.1, 0.2, 0.2))},
+		{Frame: 0, Dets: strong(rect(0.1, 0.1, 0.2, 0.2))},
 	}
-	out := Track(samples, 6, noExpand)
+	out, _ := trackRects(samples, 6, noExpand)
 	if samples[0].Frame != 4 {
 		t.Error("호출한 쪽 슬라이스 순서가 바뀜")
 	}
 	if len(out[2]) != 1 {
 		t.Errorf("정렬 후 보간되어야 함: %v", out[2])
+	}
+}
+
+func TestTrackDropsWeakOnlyTrack(t *testing.T) {
+	var samples []Sample
+	for n := 0; n < 30; n++ {
+		samples = append(samples, Sample{Frame: n, Dets: withScore(0.55, rect(0.1, 0.1, 0.1, 0.1))})
+	}
+	out, st := trackRects(samples, 30, noExpand)
+	if st.Kept != 0 || st.Dropped != 1 {
+		t.Errorf("약한 검출만 있는 트랙은 버려야 함: %+v", st)
+	}
+	for n, boxes := range out {
+		if len(boxes) != 0 {
+			t.Fatalf("%d번 프레임에 박스가 남음", n)
+		}
+	}
+}
+
+func TestTrackWeakDetectionsExtendStrongTrack(t *testing.T) {
+	samples := []Sample{{Frame: 0, Dets: strong(rect(0.1, 0.1, 0.1, 0.1))}}
+	for n := 1; n <= 10; n++ {
+		samples = append(samples, Sample{Frame: n, Dets: withScore(0.45, rect(0.1+0.005*float64(n), 0.1, 0.1, 0.1))})
+	}
+	out, st := trackRects(samples, 11, noExpand)
+	if st.Kept != 1 || st.Dropped != 0 {
+		t.Fatalf("강한 검출이 있는 트랙 하나여야 함: %+v", st)
+	}
+	if len(out[10]) != 1 || !nearRect(out[10][0], rect(0.15, 0.1, 0.1, 0.1)) {
+		t.Errorf("약한 검출로 이어진 위치를 따라가야 함: %v", out[10])
+	}
+}
+
+func TestTrackSizeAwareThreshold(t *testing.T) {
+	o := noExpand
+	o.Strong, o.Weak, o.Large = 0.7, 0, 0.08
+	var samples []Sample
+	for n := 0; n < 10; n++ {
+		samples = append(samples, Sample{Frame: n, Dets: append(
+			withScore(0.55, rect(0.1, 0.1, 0.10, 0.12)),
+			withScore(0.55, rect(0.6, 0.6, 0.03, 0.04))...)})
+	}
+	out, st := trackRects(samples, 10, o)
+	if st.Kept != 1 || st.Dropped != 1 {
+		t.Fatalf("큰 약한 트랙만 버려야 함: %+v", st)
+	}
+	if len(out[5]) != 1 || out[5][0].X != 0.6 {
+		t.Errorf("작은 트랙이 남아야 함: %v", out[5])
+	}
+}
+
+func TestRectsExcludesTrack(t *testing.T) {
+	samples := []Sample{
+		{Frame: 0, Dets: strong(rect(0.1, 0.1, 0.1, 0.1), rect(0.7, 0.1, 0.1, 0.1))},
+		{Frame: 1, Dets: strong(rect(0.1, 0.1, 0.1, 0.1), rect(0.7, 0.1, 0.1, 0.1))},
+	}
+	boxes, _ := Track(samples, 2, noExpand)
+	ids := map[int]bool{}
+	for _, b := range boxes[0] {
+		ids[b.ID] = true
+	}
+	if len(ids) != 2 || boxes[0][0].ID != boxes[1][0].ID {
+		t.Fatalf("트랙마다 번호가 다르고 프레임 사이에 같아야 함: %+v", boxes)
+	}
+	drop := boxes[0][0].ID
+	for n, rs := range Rects(boxes, map[int]bool{drop: true}) {
+		if len(rs) != 1 {
+			t.Errorf("%d번 프레임: 뺀 트랙이 남음 %v", n, rs)
+		}
 	}
 }
