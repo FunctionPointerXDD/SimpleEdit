@@ -11,7 +11,7 @@ import (
 
 const createNoWindow = 0x08000000
 
-// hideWindow는 외부 도구 실행 시 검은 콘솔 창이 뜨지 않게 한다.
+// CREATE_NO_WINDOW로 콘솔 창이 뜨지 않게 한다.
 func hideWindow(c *exec.Cmd) {
 	c.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
@@ -19,11 +19,11 @@ func hideWindow(c *exec.Cmd) {
 	}
 }
 
-// processTree는 자식까지 Job Object로 묶어 함께 끝낸다.
 type processTree struct {
 	job windows.Handle
 }
 
+// KILL_ON_JOB_CLOSE Job Object에 넣어 자식까지 함께 끝나게 한다. 실패하면 nil
 func newProcessTree(p *os.Process) *processTree {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
@@ -65,7 +65,7 @@ func (t *processTree) close() {
 	}
 }
 
-// Reveal은 탐색기로 path를 선택해 연다. 종료는 안 기다림
+// 파일이면 /select로 선택해 탐색기를 연다. 종료는 기다리지 않는다.
 func Reveal(path string) error {
 	cmd := exec.Command("explorer.exe")
 	if st, err := os.Stat(path); err == nil && !st.IsDir() {
@@ -76,7 +76,7 @@ func Reveal(path string) error {
 	return cmd.Start()
 }
 
-// longPath는 ARTTAT~1 같은 8.3 이름을 긴 이름으로 바꾼다.
+// GetLongPathName으로 ARTTAT~1 같은 8.3 이름을 긴 이름으로 바꾼다.
 func longPath(p string) string {
 	src, err := windows.UTF16PtrFromString(p)
 	if err != nil {

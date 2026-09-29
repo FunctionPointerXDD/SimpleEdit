@@ -806,14 +806,14 @@
         <div class="command-contract" data-command-contract="v1">
           <h3 data-command-field="purpose">① 코드를 고친 뒤 커밋 전: 전체 검사 실행</h3>
           <dl>
-            <dt>정확한 결과물</dt><dd data-command-field="artifact">결과물 없음(검사만). Go 테스트(internal 8개 패키지), mingw cgo로 Windows 대상 go vet·staticcheck, Go·JS 주석 규칙, 프론트 Vite 빌드, 헤드리스 Chromium 모의 UI 테스트(가로·세로 각 54항목)를 차례로 실행합니다. 앱 설치·실행·배포는 하지 않습니다.</dd>
+            <dt>정확한 결과물</dt><dd data-command-field="artifact">결과물 없음(검사만). Go 테스트(루트 + internal 8개 패키지), mingw cgo로 Windows 대상 go vet·staticcheck, Go·JS 주석 규칙, 프론트 Vite 빌드, 헤드리스 Chromium 모의 UI 테스트(가로·세로 각 57항목)를 차례로 실행합니다. 앱 설치·실행·배포는 하지 않습니다.</dd>
             <dt>대상·승인</dt><dd data-command-field="scope">사용자 또는 AI가 WSL에서 실행. 확인 창 없음. 필요: Go 1.25, mingw-w64, ffmpeg, node, Playwright Chromium(~/.cache/ms-playwright).</dd>
             <dt>READ</dt><dd data-command-field="read">저장소 소스, Go 모듈 캐시, npm 레지스트리(처음 한 번), Playwright Chromium, <code>tools/linux</code>(ffmpeg·onnxruntime·모델)</dd>
             <dt>CREATE</dt><dd data-command-field="create">임시: 테스트 임시 폴더(자동 삭제). 영속: <code>scripts/qa/node_modules</code>, <code>scripts/qa/.cache</code>(테스트 영상, staticcheck, 스크린샷), <code>frontend/dist</code>, Go 빌드 캐시. 모두 git 무시</dd>
             <dt>UPDATE</dt><dd data-command-field="update"><code>frontend/dist</code>를 새로 빌드합니다. 소스 파일은 바꾸지 않습니다.</dd>
             <dt>DELETE</dt><dd data-command-field="delete">자동: 테스트 임시 폴더. 영속 삭제: 없음</dd>
             <dt>NO CHANGE</dt><dd data-command-field="no-change">git 커밋, Windows 쪽 파일, %LOCALAPPDATA%, 원격 저장소</dd>
-            <dt>성공</dt><dd data-command-field="success">모든 패키지 <code>ok</code>, vet·staticcheck <code>ok</code>, 주석 규칙 <code>위반 0</code>, <code>wide: 통과 54/54</code>, <code>tall: 통과 54/54</code>. 종료 코드 0</dd>
+            <dt>성공</dt><dd data-command-field="success">모든 패키지 <code>ok</code>, vet·staticcheck <code>ok</code>, 주석 규칙 <code>위반 0</code>, <code>wide: 통과 57/57</code>, <code>tall: 통과 57/57</code>. 종료 코드 0</dd>
             <dt>실패</dt><dd data-command-field="failure">첫 실패 단계에서 멈추거나(Go·주석), UI 실패 항목만 출력하고 종료 코드 1. 잔여물은 위 캐시뿐이라 정리 불필요</dd>
             <dt>재실행</dt><dd data-command-field="retry">몇 번이든 그대로 다시 실행해도 됩니다. 캐시는 재사용됩니다.</dd>
           </dl>
@@ -873,7 +873,7 @@
         <details>
           <summary>저장소 작업 규칙 (이번 세션에서 합의)</summary>
           <ul>
-            <li>함수 안에는 주석을 두지 않고, 함수 밖 주석은 한 묶음 50자 이내로 씁니다.</li>
+            <li>함수 주석은 그 함수가 <b>어떻게 동작하는지</b>만 80자 이내로 씁니다. 무엇을 하는지는 이름으로 드러냅니다. 그 밖의 설명(타입·상수·필드)은 파일 맨 위에 모으고, 함수 안 주석은 두지 않습니다.</li>
             <li>프론트는 바닐라 JS를 쓰고 기능별 모듈로 나눕니다(steps, ui, mask, media, util).</li>
             <li>사용자의 실제 마우스·클립보드·창 포커스를 조작하는 테스트는 먼저 허락을 받습니다. 스크린샷만 찍는 것은 괜찮습니다.</li>
             <li>WSL에서 개발하고 Windows용으로 크로스 빌드해 Windows 쪽에서 실행을 확인합니다(cgo, mingw-w64).</li>
@@ -889,7 +889,7 @@
 이미 증명된 것:
   - F1–F5 구현(main), 2차 범위 P0–P3(feature/auto-mask)
   - YuNet Go 추론 = OpenCV, 얼굴 놓침(유사 정답) 0.02~0.06%
-  - scripts/qa/run.sh 전체 통과(Go 49개, vet·staticcheck, 주석, UI 54×2)
+  - scripts/qa/run.sh 전체 통과(Go 52개, vet·staticcheck, 주석, UI 57×2)
 먼저 확인:
   1) git branch·log·status (2차 범위는 feature/auto-mask)
   2) docs/status_board.html 3장(자동 가리기), 10장(리스크)
@@ -906,7 +906,7 @@
   - git push·커밋(사용자가 요청할 때만), main에 직접 강제 push
   - PRD 7장 비범위 기능 추가, 상업 이용이 자유롭지 않은 데이터 사용(AI Hub 보류)
 저장소 규칙:
-  - 함수 안 주석 금지, 함수 밖 주석은 한 묶음 50자 이내
+  - 함수 주석은 동작 방식만 80자 이내, 그 밖의 설명은 파일 맨 위, 함수 안 주석 금지
   - 프론트는 바닐라 JS 기능별 모듈, Go와의 통신은 frontend/src/api.js로만
   - 사용자 안내 문장은 "원인 + 할 일" 한 문장(errors.go)
 완료 보고 형식:

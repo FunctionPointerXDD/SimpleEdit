@@ -1,3 +1,5 @@
+// ErrRuntime은 주로 VC++ 런타임이 없어 onnxruntime.dll을 못 올릴 때 난다.
+
 package detect
 
 import (
@@ -9,7 +11,6 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 )
 
-// ErrRuntime은 런타임 로드 실패(주로 VC++ 런타임 없음)다.
 var ErrRuntime = errors.New("onnxruntime을 불러오지 못함")
 
 var (
@@ -17,7 +18,7 @@ var (
 	initLib string
 )
 
-// Init은 ONNX Runtime 라이브러리를 한 번만 불러온다.
+// 같은 경로로 이미 올렸으면 넘어가고, DLL 폴더를 검색 경로에 넣은 뒤 환경을 만든다.
 func Init(libPath string) error {
 	initMu.Lock()
 	defer initMu.Unlock()
@@ -36,7 +37,7 @@ func Init(libPath string) error {
 	return nil
 }
 
-// Shutdown은 ONNX Runtime 환경을 정리한다.
+// 초기화된 경우에만 환경을 해제하고 경로 기록을 지운다.
 func Shutdown() error {
 	initMu.Lock()
 	defer initMu.Unlock()

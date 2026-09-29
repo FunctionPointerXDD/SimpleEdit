@@ -1,9 +1,11 @@
+// ExportRequest.Rects는 레터박스를 뺀 영상 영역 기준 0~1 비율 좌표다.
+// ProgressEvent.Remaining은 남은 초이고, 아직 모르면 -1이다.
+
 package main
 
 import (
 	"context"
 	"errors"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,13 +24,11 @@ import (
 	"simpleEdit/internal/tools"
 )
 
-// 프론트로 보내는 진행률 이벤트 이름
 const (
 	evDownloadProgress = "download:progress"
 	evExportProgress   = "export:progress"
 )
 
-// 시간·길이 기준값
 const (
 	workMaxAge       = 7 * 24 * time.Hour
 	updateTimeout    = 2 * time.Minute
@@ -38,7 +38,6 @@ const (
 	minClipSeconds   = 1.0
 )
 
-// VideoInfo는 불러온 영상 정보다.
 type VideoInfo struct {
 	URL      string  `json:"url"`
 	Duration float64 `json:"duration"`
@@ -47,7 +46,6 @@ type VideoInfo struct {
 	Name     string  `json:"name"`
 }
 
-// ExportRequest의 사각형은 영상 영역 기준 0~1 비율.
 type ExportRequest struct {
 	Start    float64          `json:"start"`
 	End      float64          `json:"end"`
@@ -58,14 +56,12 @@ type ExportRequest struct {
 	Exclude  map[string][]int `json:"exclude"`
 }
 
-// ProgressEvent의 Remaining은 남은 초, 모르면 -1.
 type ProgressEvent struct {
 	Percent   float64 `json:"percent"`
 	Remaining float64 `json:"remaining"`
 	Stage     string  `json:"stage"`
 }
 
-// App은 프론트에 노출되는 바인딩 메서드를 가진다.
 type App struct {
 	ctx        context.Context
 	jobs       job.Manager
@@ -101,7 +97,7 @@ func (a *App) startup(ctx context.Context) {
 	go a.updateTools()
 }
 
-// updateTools는 yt-dlp를 갱신한다. 실패해도 무시.
+// 제한 시간 안에 yt-dlp -U를 돌리고, 실패는 로그만 남긴 뒤 updateDone을 닫는다.
 func (a *App) updateTools() {
 	defer close(a.updateDone)
 	ctx, cancel := context.WithTimeout(a.ctx, updateTimeout)
@@ -111,7 +107,7 @@ func (a *App) updateTools() {
 	}
 }
 
-// beforeClose는 작업 중 닫기를 확인한다. true면 유지.
+// 작업 중일 때만 묻고, "닫기"가 아니면 true를 돌려 창 닫기를 막는다.
 func (a *App) beforeClose(ctx context.Context) bool {
 	if !a.jobs.Running() {
 		return false
@@ -130,7 +126,7 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	return res != "닫기" && res != "Yes"
 }
 
-// shutdown은 미완성 파일 정리가 끝날 때까지 기다린다.
+// 작업을 취소하고 기다린 뒤, 제때 끝났을 때만 검출기를 해제한다.
 func (a *App) shutdown(ctx context.Context) {
 	if a.jobs.CancelAndWait(shutdownWaitMax) {
 		a.closeDetectors()
@@ -141,7 +137,7 @@ func (a *App) shutdown(ctx context.Context) {
 	applog.Close()
 }
 
-// Download는 유튜브 영상을 받아 미리보기를 준비한다.
+// 주소 검사 → yt-dlp 갱신 대기(최대 20초) → 받기 → load. 실패하면 작업 폴더 삭제
 func (a *App) Download(rawURL string) (VideoInfo, error) {
 	videoURL, err := download.NormalizeURL(rawURL)
 	if err != nil {
@@ -183,7 +179,7 @@ func (a *App) Download(rawURL string) (VideoInfo, error) {
 	return info, nil
 }
 
-// OpenLocal은 내 컴퓨터 영상을 연다. 취소하면 빈 값.
+// 파일 대화상자에서 고르지 않으면 빈 값, 고르면 새 작업 폴더에서 load한다.
 func (a *App) OpenLocal() (VideoInfo, error) {
 	if a.jobs.Running() {
 		return VideoInfo{}, userError(msgBusy, nil)
@@ -219,7 +215,7 @@ func (a *App) OpenLocal() (VideoInfo, error) {
 	return info, nil
 }
 
-// load는 정보를 읽고 필요하면 미리보기 파일을 만든다.
+// ffprobe로 읽고, WebView가 못 트는 코덱이면 H.264 미리보기를 만든다.
 func (a *App) load(ctx context.Context, path, workDir string, emit func(float64, string)) (VideoInfo, error) {
 	info, err := media.Probe(ctx, path)
 	if err != nil {
@@ -250,7 +246,7 @@ func (a *App) load(ctx context.Context, path, workDir string, emit func(float64,
 	}, nil
 }
 
-// CloseVideo는 편집하던 영상을 닫는다.
+// 경로·정보·자동 분석 결과만 비운다. 파일은 지우지 않는다.
 func (a *App) CloseVideo() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -260,19 +256,17 @@ func (a *App) CloseVideo() {
 	applog.Printf("영상 닫음")
 }
 
-// OutputFolder는 저장 폴더. 처음엔 바탕화면
 func (a *App) OutputFolder() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.settings.OutputDirOrDesktop()
 }
 
-// DefaultFileName은 확장자 없는 기본 파일 이름이다.
 func (a *App) DefaultFileName() string {
 	return appdir.DefaultFileName(time.Now())
 }
 
-// ChooseOutputFolder는 저장 폴더를 고르고 기억한다.
+// 폴더 대화상자에서 고른 경로를 settings.json에 쓴다. 취소하면 현재 폴더
 func (a *App) ChooseOutputFolder() (string, error) {
 	current := a.OutputFolder()
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
@@ -294,7 +288,7 @@ func (a *App) ChooseOutputFolder() (string, error) {
 	return dir, nil
 }
 
-// Export는 자르고 가린 영상을 저장하고 경로를 반환한다.
+// 자동 박스가 있으면 프레임 파이프(Go 모자이크), 없으면 ffmpeg 필터로 저장
 func (a *App) Export(req ExportRequest) (string, error) {
 	a.mu.Lock()
 	source, info, outDir := a.source, a.info, a.settings.OutputDirOrDesktop()
@@ -339,7 +333,7 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	if auto != nil {
 		spec := pipeSpec(source, info, start, end)
 		spec.Mute = req.Mute
-		err = exportAuto(ctx, spec, out, req.Rects, auto, progress)
+		err = media.ProcessFrames(ctx, spec, out, automask.PixelateFunc(req.Rects, auto), progress)
 	} else {
 		err = media.Export(ctx, media.ExportSpec{
 			Source: source, Output: out, Start: start, Duration: end - start, Rects: rects, Mute: req.Mute,
@@ -354,7 +348,7 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	return out, nil
 }
 
-// estimateSize는 저장 크기를 넉넉히 어림한다.
+// 비트레이트(모르면 8Mbps) × 길이 × 1.5 + 50MB
 func estimateSize(info media.Info, seconds float64) int64 {
 	bps := info.BitRate
 	if bps <= 0 {
@@ -363,13 +357,12 @@ func estimateSize(info media.Info, seconds float64) int64 {
 	return int64(float64(bps)/8*seconds*1.5) + 50<<20
 }
 
-// Cancel은 진행 중인 다운로드·저장을 멈춘다.
 func (a *App) Cancel() {
 	applog.Printf("사용자가 취소함")
 	a.jobs.Cancel()
 }
 
-// OpenOutputFolder는 저장한 파일을 선택해 폴더를 연다.
+// 마지막 저장 파일을 탐색기에서 선택한다. 없으면 저장 폴더를 연다.
 func (a *App) OpenOutputFolder() {
 	a.mu.Lock()
 	out := a.lastOutput
@@ -382,7 +375,7 @@ func (a *App) OpenOutputFolder() {
 	}
 }
 
-// progressEmitter는 진행률을 250ms 간격으로 보낸다.
+// 단계가 바뀌면 ETA를 새로 재고, 250ms 간격으로만 이벤트를 보낸다.
 func (a *App) progressEmitter(name string) func(frac float64, stage string) {
 	var (
 		eta       = job.NewETA()
@@ -404,34 +397,4 @@ func (a *App) progressEmitter(name string) func(frac float64, stage string) {
 			Stage:     stage,
 		})
 	}
-}
-
-// serveVideo는 미리보기 파일을 Range 지원으로 내보낸다.
-func (a *App) serveVideo(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/video/current" {
-		http.NotFound(w, r)
-		return
-	}
-	a.mu.Lock()
-	path := a.preview
-	a.mu.Unlock()
-	if path == "" {
-		http.NotFound(w, r)
-		return
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		applog.Printf("미리보기 파일 열기 실패: %v", err)
-		http.NotFound(w, r)
-		return
-	}
-	defer f.Close()
-	st, err := f.Stat()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "video/mp4")
-	w.Header().Set("Cache-Control", "no-store")
-	http.ServeContent(w, r, "video.mp4", st.ModTime(), f)
 }

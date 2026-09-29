@@ -1,3 +1,7 @@
+// EnvBinDir 환경 변수가 있으면 bin\ 대신 그 폴더를 쓴다.
+// waitDelay는 손자 프로세스가 파이프를 잡고 있어도 Wait가 끝나게 하는 여유다.
+// Cmd는 콘솔 창 없이 실행되고, 취소하면 자식 프로세스까지 함께 끝난다.
+
 // Package tools는 bin\ 도구를 콘솔 창 없이 실행한다.
 package tools
 
@@ -17,23 +21,19 @@ import (
 	"simpleEdit/internal/applog"
 )
 
-// 외부 도구 이름 (확장자 제외)
 const (
 	YtDlp   = "yt-dlp"
 	FFmpeg  = "ffmpeg"
 	FFprobe = "ffprobe"
 )
 
-// EnvBinDir가 있으면 bin\ 대신 그 폴더를 쓴다.
 const EnvBinDir = "SIMPLEEDIT_BIN"
 
-// ErrMissing은 도구 파일이 없을 때 반환된다.
 var ErrMissing = errors.New("도구 파일 없음")
 
-// 손자가 파이프를 잡아도 Wait가 끝나게 하는 여유
 const waitDelay = 3 * time.Second
 
-// BinDir는 외부 도구가 있는 폴더다. 기본값은 실행 파일 옆 bin\.
+// SIMPLEEDIT_BIN이 있으면 그 폴더, 없으면 실행 파일(링크 해석) 옆 bin
 func BinDir() string {
 	if d := os.Getenv(EnvBinDir); d != "" {
 		return d
@@ -48,7 +48,7 @@ func BinDir() string {
 	return filepath.Join(filepath.Dir(exe), "bin")
 }
 
-// Path는 도구 이름에 해당하는 실행 파일 경로다.
+// Windows에서는 .exe를 붙인다.
 func Path(name string) string {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
@@ -56,7 +56,6 @@ func Path(name string) string {
 	return filepath.Join(BinDir(), name)
 }
 
-// Cmd는 콘솔 창 없이 실행되고, 취소하면 자식 프로세스까지 함께 종료되는 외부 명령이다.
 type Cmd struct {
 	*exec.Cmd
 	name   string
@@ -65,7 +64,7 @@ type Cmd struct {
 	mu     sync.Mutex
 }
 
-// Command는 취소 시 트리 종료, PATH에 bin\ 추가
+// PATH 앞에 bin을 넣고, 취소되면 Job Object(또는 프로세스 그룹)째 끝낸다.
 func Command(ctx context.Context, name string, args ...string) *Cmd {
 	c := &Cmd{name: name}
 	c.Cmd = exec.CommandContext(ctx, Path(name), args...)
@@ -86,7 +85,7 @@ func Command(ctx context.Context, name string, args ...string) *Cmd {
 	return c
 }
 
-// Start는 프로세스를 시작하고 Job Object에 묶는다.
+// 실행 파일이 없으면 ErrMissing. 시작하면 프로세스 트리에 묶는다.
 func (c *Cmd) Start() error {
 	if _, err := os.Stat(c.Path); err != nil {
 		applog.Printf("[%s] 실행 파일 없음: %s", c.name, c.Path)
@@ -104,7 +103,7 @@ func (c *Cmd) Start() error {
 	return nil
 }
 
-// Wait는 종료를 기다리고 stderr 끝부분을 로그에 남긴다.
+// 종료를 기다린 뒤 트리를 닫고 stderr 끝부분과 종료 코드를 로그에 남긴다.
 func (c *Cmd) Wait() error {
 	err := c.Cmd.Wait()
 	c.mu.Lock()
@@ -121,7 +120,6 @@ func (c *Cmd) Wait() error {
 	return err
 }
 
-// Run은 Start와 Wait를 이어서 부른다.
 func (c *Cmd) Run() error {
 	if err := c.Start(); err != nil {
 		return err
@@ -129,7 +127,6 @@ func (c *Cmd) Run() error {
 	return c.Wait()
 }
 
-// Output은 stdout 전체를 받아 반환한다.
 func (c *Cmd) Output() ([]byte, error) {
 	var out bytes.Buffer
 	c.Cmd.Stdout = &out
@@ -137,7 +134,7 @@ func (c *Cmd) Output() ([]byte, error) {
 	return out.Bytes(), err
 }
 
-// Stderr는 stderr의 마지막 부분(최대 64KB)이다. 오류 원인 분류에 쓴다.
+// 마지막 64KB만 남긴 stderr
 func (c *Cmd) Stderr() string { return c.stderr.String() }
 
 func quoteArgs(args []string) string {
@@ -151,7 +148,6 @@ func quoteArgs(args []string) string {
 	return strings.Join(q, " ")
 }
 
-// tailBuffer는 마지막 64KB만 보관한다.
 type tailBuffer struct {
 	mu  sync.Mutex
 	buf []byte

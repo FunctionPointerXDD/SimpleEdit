@@ -1,7 +1,7 @@
 import {h} from '../ui/dom.js';
 import {state} from '../state.js';
 
-// 3단계의 소리 없애기 패널. 미리보기도 함께 음소거
+// state.mute를 뒤집고 미리보기 video.muted를 맞춘다. unmount 때 음소거를 푼다.
 export function createSoundPanel({guide, video}) {
     const btn = h('button.btn.secondary.auto-btn.sound-btn', {type: 'button', onclick: toggle});
     const status = h('p.auto-status');

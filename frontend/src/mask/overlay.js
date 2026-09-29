@@ -1,10 +1,12 @@
+// MIN_DRAG_PX보다 작게 끈 것은 클릭으로 보고, 그 자리의 자동 박스를 빼거나 되살린다.
+// 직접 가림이 꽉 차도 누른 자리에 자동 박스가 있으면 뺄 수 있다. 겹치면 가장 작은 박스를 고른다.
+
 import {h} from '../ui/dom.js';
 
-// 이보다 작게 끈 사각형은 실수로 보고 버린다.
 const MIN_DRAG_PX = 8;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
-// contain으로 그려진 실제 영상 영역(요소 기준 px)
+// object-fit: contain 비율로 요소 안 실제 영상 영역(px)을 계산한다.
 function contentBox(video) {
     const ew = video.clientWidth;
     const eh = video.clientHeight;
@@ -16,7 +18,7 @@ function contentBox(video) {
     return {x: (ew - w) / 2, y: (eh - h) / 2, w, h};
 }
 
-// 끌어 그린 사각형(비율)과 자동 박스(주황)를 그린다.
+// 좌표는 영상 영역 비율. 재생 중엔 rAF, 멈춤 땐 timeupdate·seeked로 다시 그린다.
 export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd, onAdd, onBlocked, onStart}) {
     const off = new AbortController();
     const on = (target, type, fn) => target.addEventListener(type, fn, {signal: off.signal});
@@ -44,21 +46,30 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
         h: Math.abs(drag.y1 - drag.y0),
     });
 
-    function finish() {
+    function finish(clicked) {
         if (!drag) return;
         const box = contentBox(video);
         const r = dragRect();
         const at = {x: drag.x1, y: drag.y1};
         drag = null;
         if (r.w * box.w >= MIN_DRAG_PX && r.h * box.h >= MIN_DRAG_PX) onAdd(r);
-        else clickAuto(at);
+        else if (clicked) clickAuto(at);
         draw();
     }
 
+    function autoAt(p) {
+        let best = null;
+        for (const b of getAuto?.(video.currentTime) || []) {
+            const inside = p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+            if (inside && (!best || b.w * b.h < best.w * best.h)) best = b;
+        }
+        return best;
+    }
+
     function clickAuto(p) {
-        const hit = (getAuto?.(video.currentTime) || []).find((b) =>
-            p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h);
+        const hit = autoAt(p);
         if (hit) onAutoClick?.(hit);
+        return !!hit;
     }
 
     function draw() {
@@ -150,7 +161,8 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
         const p = pointIn(ev);
         if (ev.button !== 0 || !p.inside) return;
         if (!canAdd()) {
-            onBlocked();
+            if (!clickAuto(p)) onBlocked();
+            draw();
             return;
         }
         onStart?.();
@@ -166,8 +178,8 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
         drag.y1 = p.y;
         draw();
     });
-    on(canvas, 'pointerup', finish);
-    on(canvas, 'pointercancel', finish);
+    on(canvas, 'pointerup', () => finish(true));
+    on(canvas, 'pointercancel', () => finish(false));
     on(video, 'loadedmetadata', draw);
     on(video, 'seeked', draw);
     on(video, 'timeupdate', draw);

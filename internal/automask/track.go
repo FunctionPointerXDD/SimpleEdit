@@ -1,3 +1,9 @@
+// 좌표는 모두 화면 대비 0~1 비율이다. MaxGap·Hold는 프레임 수다.
+// MatchIoU는 같은 대상으로 볼 최소 IoU, Expand 0.4는 폭·높이를 40% 키운다는 뜻이다.
+// 평균 폭이 Large 이상인 트랙은 최고 점수가 Strong, 아니면 Weak 이상이어야 남는다.
+// 기본 Weak 0은 작은 트랙(멀리 있는 얼굴)을 거르지 않으려는 것이다.
+// TrackBox.ID는 남긴 트랙 순서대로 1부터 매긴다.
+
 // Package automask는 자동 검출 박스를 프레임마다 이어 준다.
 package automask
 
@@ -8,48 +14,41 @@ import (
 	"simpleEdit/internal/media"
 )
 
-// TrackOptions는 놓치지 않는 쪽으로 기울인 추적 설정이다.
 type TrackOptions struct {
-	MatchIoU float32 // 같은 대상으로 볼 최소 IoU
-	MaxGap   int     // 이 프레임 수까지 끊겨도 보간
-	Hold     int     // 처음·마지막 검출 앞뒤로 유지할 프레임 수
-	Expand   float64 // 박스 폭·높이 확대 비율 (0.25 = 25%)
-	Strong   float32 // 큰 트랙이 남으려면 한 번은 넘을 점수
-	Weak     float32 // 작은 트랙이 남으려면 한 번은 넘을 점수
-	Large    float64 // 평균 폭(화면 비율)이 이 이상이면 큰 트랙
+	MatchIoU float32
+	MaxGap   int
+	Hold     int
+	Expand   float64
+	Strong   float32
+	Weak     float32
+	Large    float64
 }
 
-// DefaultTrackOptions는 30fps 기준값. 보통 OptionsFor 사용
 var DefaultTrackOptions = TrackOptions{
 	MatchIoU: 0.2, MaxGap: 15, Hold: 8, Expand: 0.4,
 	Strong: 0.7, Weak: 0, Large: 0.08,
 }
 
-// TrackBox는 프레임에 그릴 박스와 트랙 번호(1부터)다.
 type TrackBox struct {
 	Rect media.Rect
 	ID   int
 }
 
-// Det는 비율 좌표 박스와 검출 점수다.
 type Det struct {
 	Box   media.Rect
 	Score float32
 }
 
-// Sample은 한 프레임의 검출 결과다.
 type Sample struct {
 	Frame int
 	Dets  []Det
 }
 
-// TrackStats는 남긴·버린 트랙 수와 트랙별 요약이다.
 type TrackStats struct {
 	Kept, Dropped int
 	Tracks        []TrackInfo
 }
 
-// TrackInfo는 트랙 하나의 구간, 최고 점수, 평균 위치다.
 type TrackInfo struct {
 	First, Last int
 	Detections  int
@@ -65,7 +64,7 @@ type obs struct {
 	score float32
 }
 
-// Track은 샘플을 잇고 강한 검출 없는 트랙은 버린다.
+// 프레임 순으로 정렬한 복사본을 link로 잇고, 폭에 맞는 점수를 못 넘은 트랙은 버린다.
 func Track(samples []Sample, frames int, o TrackOptions) ([][]TrackBox, TrackStats) {
 	sorted := append([]Sample(nil), samples...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Frame < sorted[j].Frame })
@@ -96,7 +95,7 @@ func summarize(tr []obs) TrackInfo {
 	return info
 }
 
-// required는 트랙 크기에 따라 넘어야 할 점수다.
+// 평균 폭이 Large 이상이면 Strong, 아니면 Weak
 func (o TrackOptions) required(width float64) float32 {
 	if width >= o.Large {
 		return o.Strong
@@ -104,7 +103,7 @@ func (o TrackOptions) required(width float64) float32 {
 	return o.Weak
 }
 
-// link는 IoU가 가장 큰 기존 트랙에 탐욕적으로 붙인다.
+// 검출마다 MaxGap 안의 트랙 중 IoU가 가장 큰 곳에 붙이고, 없으면 새 트랙을 연다.
 func link(samples []Sample, o TrackOptions) [][]obs {
 	var tracks [][]obs
 	for _, s := range samples {
@@ -133,7 +132,7 @@ func link(samples []Sample, o TrackOptions) [][]obs {
 	return tracks
 }
 
-// fill은 한 트랙을 보간·유지·확대해 프레임별로 넣는다.
+// 첫 검출 앞 Hold, 검출 사이는 선형 보간, 끝 검출 뒤 Hold 프레임까지 확대해 넣는다.
 func fill(out [][]TrackBox, tr []obs, id int, o TrackOptions) {
 	put := func(n int, r media.Rect) {
 		if n >= 0 && n < len(out) {
@@ -160,7 +159,7 @@ func fill(out [][]TrackBox, tr []obs, id int, o TrackOptions) {
 	}
 }
 
-// Rects는 뺀 트랙을 제외한 프레임별 사각형이다.
+// exclude에 든 ID의 박스만 빼고 Rect를 꺼낸다.
 func Rects(frames [][]TrackBox, exclude map[int]bool) [][]media.Rect {
 	out := make([][]media.Rect, len(frames))
 	for n, boxes := range frames {
@@ -180,7 +179,7 @@ func lerp(a, b media.Rect, t float64) media.Rect {
 	}
 }
 
-// expand는 중심을 유지한 채 키우고 0~1로 자른다.
+// 중심을 유지한 채 폭·높이를 k배만큼 키우고 0~1로 자른다.
 func expand(r media.Rect, k float64) media.Rect {
 	dx, dy := r.W*k/2, r.H*k/2
 	x0, y0 := max(0, r.X-dx), max(0, r.Y-dy)

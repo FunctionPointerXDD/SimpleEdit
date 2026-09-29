@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Desktop은 개발 환경용 대체 경로다. ~/Desktop이 없으면 홈 폴더.
+// ~/Desktop이 없으면 홈 폴더를 쓴다.
 func Desktop() string {
 	home, _ := os.UserHomeDir()
 	d := filepath.Join(home, "Desktop")
@@ -19,7 +19,7 @@ func Desktop() string {
 	return home
 }
 
-// FreeBytes는 path가 있는 파일시스템의 남은 용량이다. 알 수 없으면 -1.
+// statfs로 남은 블록 × 블록 크기. 실패하면 -1
 func FreeBytes(path string) int64 {
 	var st unix.Statfs_t
 	if err := unix.Statfs(path, &st); err != nil {

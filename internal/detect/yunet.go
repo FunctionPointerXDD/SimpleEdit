@@ -1,3 +1,6 @@
+// DefaultFaceScore 0.4는 놓치지 않게 OpenCV 기본값(0.9)보다 낮춘 값이다.
+// yunetOutputs는 stride(8·16·32)별 cls, obj, bbox 원시 출력이다.
+
 package detect
 
 import (
@@ -10,16 +13,12 @@ import (
 	"simpleEdit/internal/frame"
 )
 
-// YuNet 2023mar 모델의 고정 입력 크기
 const yunetSize = 640
 
-// DefaultFaceScore는 놓치지 않게 낮춘 점수 기준이다.
 const DefaultFaceScore = 0.4
 
-// YuNet 출력의 stride 단계
 var yunetStrides = [3]int{8, 16, 32}
 
-// FaceDetector는 YuNet으로 얼굴을 찾는다.
 type FaceDetector struct {
 	ScoreThreshold float32
 	NMSThreshold   float32
@@ -29,12 +28,11 @@ type FaceDetector struct {
 	outs  []*ort.Tensor[float32]
 }
 
-// yunetOutputs는 stride별 cls, obj, bbox 원시 값이다.
 type yunetOutputs struct {
 	cls, obj, bbox [3][]float32
 }
 
-// NewFaceDetector는 모델을 열어 검출기를 만든다. Init 먼저
+// Init 뒤에 부른다. 입출력 텐서를 미리 만들어 세션에 묶어 둔다.
 func NewFaceDetector(modelPath string) (*FaceDetector, error) {
 	in, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 3, yunetSize, yunetSize))
 	if err != nil {
@@ -74,7 +72,7 @@ func yunetChannels(kind string) int64 {
 	return 1
 }
 
-// Detect는 프레임에서 얼굴 박스를 원본 좌표로 돌려준다.
+// letterbox → 추론 → 디코드 → NMS 뒤 원본 좌표로 되돌린다.
 func (d *FaceDetector) Detect(f frame.Frame) ([]Box, error) {
 	if d.sess == nil {
 		return nil, errors.New("닫힌 검출기")
@@ -93,7 +91,6 @@ func (d *FaceDetector) Detect(f frame.Frame) ([]Box, error) {
 	return toFrame(boxes, scale, f.W, f.H), nil
 }
 
-// Close는 세션과 텐서를 해제한다.
 func (d *FaceDetector) Close() {
 	if d.sess != nil {
 		d.sess.Destroy()
@@ -109,7 +106,7 @@ func (d *FaceDetector) Close() {
 	}
 }
 
-// decodeYuNet은 FaceDetectorYN과 같이 점수·박스를 푼다.
+// score=√(cls·obj), 중심=(칸+d)·stride, 크기=exp(d)·stride로 푼다.
 func decodeYuNet(o yunetOutputs, scoreTh float32) []Box {
 	var boxes []Box
 	for i, s := range yunetStrides {
@@ -134,7 +131,7 @@ func decodeYuNet(o yunetOutputs, scoreTh float32) []Box {
 	return boxes
 }
 
-// toFrame은 모델 좌표를 원본 프레임 좌표로 바꾸고 잘라낸다.
+// scale로 나눠 원본 좌표로 바꾸고 프레임 밖은 잘라낸다. 넓이 0이면 버림
 func toFrame(boxes []Box, scale float32, w, h int) []Box {
 	out := make([]Box, 0, len(boxes))
 	for _, b := range boxes {

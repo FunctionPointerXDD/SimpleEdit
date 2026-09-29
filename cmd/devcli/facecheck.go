@@ -1,3 +1,6 @@
+// facecheck: 긴 변 gtDetectSize로 모든 프레임을 검출한 결과를 유사 정답으로 삼아
+// filterCandidates(큰 박스 기준 점수, 작은 박스 기준 점수, 큰 박스 폭)별 놓침을 비교한다.
+
 package main
 
 import (
@@ -12,10 +15,8 @@ import (
 	"simpleEdit/internal/tools"
 )
 
-// 유사 정답: 모든 프레임을 이 크기로 검출
 const gtDetectSize = 1280
 
-// 비교할 거르기 설정: 큰 박스 기준, 작은 박스 기준, 큰 박스 폭
 var filterCandidates = []struct {
 	strong, weak float32
 	large        float64
@@ -23,7 +24,7 @@ var filterCandidates = []struct {
 	{0, 0, 0}, {0.7, 0, 0.06}, {0.7, 0, 0.07}, {0.7, 0, 0.08},
 }
 
-// facecheck는 강한 점수 기준별 놓침·트랙을 비교한다.
+// 검출은 한 번만 모으고 후보마다 Track만 다시 돌려 놓침·표시 박스를 센다.
 func facecheck(ctx context.Context, src string, start, end float64, gtScore float32, verbose bool) error {
 	info, err := media.Probe(ctx, src)
 	if err != nil {
@@ -102,7 +103,7 @@ func groundTruth(ctx context.Context, spec media.PipeSpec, det *detect.FaceDetec
 	return gt, err
 }
 
-// covered는 기준 박스 면적의 80% 이상이 덮였는지 본다.
+// 기준 박스 넓이의 80% 이상을 덮는 마스크가 하나라도 있으면 true
 func covered(g media.Rect, masks []media.Rect) bool {
 	for _, m := range masks {
 		x0, y0 := max(g.X, m.X), max(g.Y, m.Y)
@@ -114,7 +115,7 @@ func covered(g media.Rect, masks []media.Rect) bool {
 	return false
 }
 
-// printTracks는 검출이 많은 트랙부터 몇 개 보여 준다.
+// 검출 수가 많은 트랙부터 30개까지 출력한다.
 func printTracks(st automask.TrackStats, fps, start float64) {
 	tr := append([]automask.TrackInfo(nil), st.Tracks...)
 	sort.Slice(tr, func(i, j int) bool { return tr[i].Detections > tr[j].Detections })

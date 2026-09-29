@@ -1,3 +1,5 @@
+// 2단계: "여기서 시작"/"여기서 끝"으로 구간 정하기
+
 import {h} from '../ui/dom.js';
 import {createPlayer} from '../ui/player.js';
 import {createGuide} from '../ui/message.js';
@@ -5,7 +7,6 @@ import {openVideo} from '../media/videoSource.js';
 import {state, checkRange, setRange} from '../state.js';
 import {formatClock, formatLength, roundTenth} from '../util/time.js';
 
-// 2단계: "여기서 시작"/"여기서 끝"으로 구간 정하기
 export const trimStep = {
     title: '구간 자르기',
     mount(root, ctx) {

@@ -1,3 +1,5 @@
+// 3단계: 자동 가리기, 소리 없애기, 직접 가릴 곳
+
 import {h} from '../ui/dom.js';
 import {createPlayer} from '../ui/player.js';
 import {createGuide} from '../ui/message.js';
@@ -7,7 +9,6 @@ import {createAutoPanel} from '../mask/autoPanel.js';
 import {createSoundPanel} from '../mask/soundPanel.js';
 import {state, MAX_RECTS, autoRectsAt, toggleExcluded} from '../state.js';
 
-// 3단계: 자동 가리기, 소리 없애기, 직접 가릴 곳
 export const maskStep = {
     title: '가릴 곳 정하기',
     mount(root, ctx) {

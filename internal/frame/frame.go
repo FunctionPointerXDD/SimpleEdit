@@ -1,23 +1,20 @@
+// Frame.Pix는 bgr24이고 len(Pix) = W*H*3이다.
+
 // Package frame은 bgr24 프레임과 모자이크를 다룬다.
 package frame
 
 import "image"
 
-// Frame은 bgr24 한 장이다. len(Pix) = W*H*3
 type Frame struct {
 	W, H int
 	Pix  []byte
 }
 
-// New는 검은 프레임을 만든다.
 func New(w, h int) Frame {
 	return Frame{W: w, H: h, Pix: make([]byte, w*h*3)}
 }
 
-// Size는 프레임 한 장의 바이트 수다.
-func Size(w, h int) int { return w * h * 3 }
-
-// FromImage는 image.Image를 bgr24 Frame으로 바꾼다.
+// At으로 한 픽셀씩 읽어 16비트 RGBA의 상위 바이트를 BGR 순으로 넣는다.
 func FromImage(img image.Image) Frame {
 	b := img.Bounds()
 	f := New(b.Dx(), b.Dy())
@@ -32,7 +29,7 @@ func FromImage(img image.Image) Frame {
 	return f
 }
 
-// Pixelate는 사각형을 block 크기 칸 평균색으로 채운다.
+// 화면 안으로 자른 사각형을 block 크기에 가깝게 균등 분할해 칸마다 평균색으로 칠한다.
 func (f Frame) Pixelate(r image.Rectangle, block int) {
 	r = r.Intersect(image.Rect(0, 0, f.W, f.H))
 	if r.Empty() {
@@ -51,7 +48,7 @@ func (f Frame) Pixelate(r image.Rectangle, block int) {
 	}
 }
 
-// fillMean은 칸 안을 채널별 평균값으로 채운다.
+// 채널별 합을 넓이로 나눈 평균으로 칸 전체를 덮는다.
 func (f Frame) fillMean(x0, y0, x1, y1 int) {
 	var sum [3]int
 	for y := y0; y < y1; y++ {

@@ -1,7 +1,7 @@
 import {h} from './dom.js';
 import {formatClock} from '../util/time.js';
 
-// 공유 video를 쓰는 플레이어. destroy해도 영상은 유지
+// 공유 video를 감싸 min~max 안에서만 재생한다. destroy는 요소를 떼기만 한다.
 export function createPlayer({video, duration, min = 0, max = duration, fineSteps = true}) {
     const off = new AbortController();
     const on = (target, type, fn) => target.addEventListener(type, fn, {signal: off.signal});
@@ -16,14 +16,15 @@ export function createPlayer({video, duration, min = 0, max = duration, fineStep
 
     const el = h('div.player', {},
         stage,
-        h('div.seek-wrap', {}, marks, range),
+        h('div.seek-row', {}, h('div.seek-wrap', {}, marks, range), clock),
         h('div.player-controls', {},
             stepBtn('5초 뒤로', -5),
+            stepBtn('1초 뒤로', -1),
             fineSteps && stepBtn('0.1초 뒤로', -0.1),
             playBtn,
             fineSteps && stepBtn('0.1초 앞으로', 0.1),
+            stepBtn('1초 앞으로', 1),
             stepBtn('5초 앞으로', 5),
-            clock,
         ),
     );
 

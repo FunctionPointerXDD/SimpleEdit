@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-// hideWindow는 트리 종료용 프로세스 그룹을 만든다.
+// 창 대신 새 프로세스 그룹을 만들어 그룹째 끝낼 수 있게 한다.
 func hideWindow(c *exec.Cmd) {
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
@@ -26,7 +26,7 @@ func (t *processTree) kill() {
 
 func (t *processTree) close() {}
 
-// Reveal은 개발 환경에서 path가 있는 폴더를 연다.
+// 파일이면 그 폴더를 xdg-open으로 연다.
 func Reveal(path string) error {
 	if st, err := os.Stat(path); err == nil && !st.IsDir() {
 		path = filepath.Dir(path)
@@ -34,5 +34,4 @@ func Reveal(path string) error {
 	return exec.Command("xdg-open", path).Start()
 }
 
-// longPath는 Windows 밖에서는 그대로 돌려준다.
 func longPath(p string) string { return p }

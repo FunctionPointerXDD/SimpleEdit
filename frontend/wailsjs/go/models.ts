@@ -22,6 +22,7 @@ export namespace main {
 	    duration: number;
 	    fps: number;
 	    found: number;
+	    tracks: number;
 	    frames: number[][][];
 	
 	    static createFrom(source: any = {}) {
@@ -35,6 +36,7 @@ export namespace main {
 	        this.duration = source["duration"];
 	        this.fps = source["fps"];
 	        this.found = source["found"];
+	        this.tracks = source["tracks"];
 	        this.frames = source["frames"];
 	    }
 	}

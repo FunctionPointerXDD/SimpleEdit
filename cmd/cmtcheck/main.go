@@ -1,4 +1,7 @@
-// cmtcheck는 주석 규칙(함수 안 금지, 50자 이내)을 검사한다.
+// 주석 규칙
+// - 파일 맨 위(package 앞)의 주석은 줄마다 80자 이내
+// - 함수 바로 위 주석은 한 묶음 80자 이내, 동작 방식만 적는다
+// - 그 밖의 주석(함수 안, 타입·상수·필드)은 위반
 package main
 
 import (
@@ -12,10 +15,8 @@ import (
 	"unicode/utf8"
 )
 
-// 주석 한 묶음의 최대 글자 수
-const maxRunes = 50
+const maxRunes = 80
 
-// 검사하지 않는 최상위 폴더
 var skipDirs = map[string]bool{"frontend": true, "tools": true, "build": true, "dist": true, "scripts": true}
 
 func main() {
@@ -47,7 +48,7 @@ func main() {
 	}
 }
 
-// checkFile은 한 파일의 위반 수를 출력하고 돌려준다.
+// 함수 doc 묶음을 모아 두고, 파일 머리·함수 doc이 아닌 묶음을 센다.
 func checkFile(path string) int {
 	fs := token.NewFileSet()
 	f, err := parser.ParseFile(fs, path, nil, parser.ParseComments)
@@ -55,39 +56,43 @@ func checkFile(path string) int {
 		fmt.Println(err)
 		return 1
 	}
-	var bodies [][2]token.Pos
-	ast.Inspect(f, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.FuncDecl:
-			if x.Body != nil {
-				bodies = append(bodies, [2]token.Pos{x.Body.Lbrace, x.Body.Rbrace})
-			}
-		case *ast.FuncLit:
-			bodies = append(bodies, [2]token.Pos{x.Body.Lbrace, x.Body.Rbrace})
+	docs := map[*ast.CommentGroup]bool{}
+	for _, d := range f.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Doc != nil {
+			docs[fn.Doc] = true
 		}
-		return true
-	})
+	}
 	bad := 0
+	report := func(g *ast.CommentGroup, why, text string) {
+		fmt.Printf("%s:%d: %s: %s\n", path, fs.Position(g.Pos()).Line, why, text)
+		bad++
+	}
 	for _, g := range f.Comments {
 		if strings.HasPrefix(g.List[0].Text, "//go:") {
 			continue
 		}
-		text := ""
-		for _, c := range g.List {
-			text += strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(c.Text, "//"), "/*"))
-		}
-		line := fs.Position(g.Pos()).Line
-		for _, b := range bodies {
-			if g.Pos() > b[0] && g.Pos() < b[1] {
-				fmt.Printf("%s:%d: 함수 안 주석: %s\n", path, line, text)
-				bad++
-				break
+		switch {
+		case g.End() < f.Package:
+			for _, c := range g.List {
+				if t := commentText(c.Text); utf8.RuneCountInString(t) > maxRunes {
+					report(g, fmt.Sprintf("머리 주석 %d자", utf8.RuneCountInString(t)), t)
+				}
 			}
-		}
-		if n := utf8.RuneCountInString(text); n > maxRunes {
-			fmt.Printf("%s:%d: %d자: %s\n", path, line, n, text)
-			bad++
+		case docs[g]:
+			t := ""
+			for _, c := range g.List {
+				t += commentText(c.Text)
+			}
+			if n := utf8.RuneCountInString(t); n > maxRunes {
+				report(g, fmt.Sprintf("함수 주석 %d자", n), t)
+			}
+		default:
+			report(g, "함수 설명 외 주석은 파일 맨 위로", commentText(g.List[0].Text))
 		}
 	}
 	return bad
+}
+
+func commentText(c string) string {
+	return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(c, "//"), "/*"), "*/"))
 }

@@ -1,58 +1,84 @@
-// JS 주석 규칙 검사: 함수 안 금지, 한 묶음 50자 이내
+// JS 주석 규칙 (cmd/cmtcheck와 같음)
+// - 파일 맨 위(첫 문장 앞)의 주석은 줄마다 80자 이내
+// - 최상위 함수 바로 위 주석은 한 묶음 80자 이내, 동작 방식만 적는다
+// - 그 밖의 주석(함수 안, 상수·객체 위)은 위반
+// LIST=1이면 위반 대신 모든 주석 묶음과 종류를 출력한다.
 import fs from 'node:fs';
 import path from 'node:path';
 import * as acorn from 'acorn';
-import * as walk from 'acorn-walk';
 
-const MAX_CHARS = 50;
-const root = process.argv[2] || '.';
+const MAX_CHARS = 80;
+const roots = process.argv.length > 2 ? process.argv.slice(2) : ['.'];
+const listMode = process.env.LIST === '1';
 
 function listJS(dir) {
     return fs.readdirSync(dir, {withFileTypes: true}).flatMap((e) => {
         const p = path.join(dir, e.name);
-        if (e.isDirectory()) return listJS(p);
-        return p.endsWith('.js') ? [p] : [];
+        if (e.isDirectory()) return e.name === 'node_modules' ? [] : listJS(p);
+        return p.endsWith('.js') || p.endsWith('.mjs') ? [p] : [];
     });
 }
 
+// 이어진 줄 주석은 한 묶음으로, 줄 목록과 합친 글자를 함께 둔다.
 function groupComments(comments) {
     const groups = [];
     for (const c of comments) {
         const last = groups.at(-1);
-        if (last && c.type === 'Line' && c.loc.start.line === last.endLine + 1) {
-            last.text += c.value.trim();
+        const lines = c.value.split('\n').map((l) => l.replace(/^\s*\*?/, '').trim()).filter(Boolean);
+        if (last && c.type === 'Line' && last.type === 'Line' && c.loc.start.line === last.endLine + 1) {
+            last.lines.push(...lines);
             last.endLine = c.loc.end.line;
         } else {
-            groups.push({start: c.start, line: c.loc.start.line, endLine: c.loc.end.line,
-                text: c.value.replace(/^\*|\n\s*\*/g, ' ').trim()});
+            groups.push({type: c.type, start: c.start, line: c.loc.start.line, endLine: c.loc.end.line, lines});
         }
     }
     return groups;
+}
+
+const isFn = (n) => n && /^(Arrow)?Function(Expression|Declaration)$/.test(n.type);
+
+// 최상위 문장 중 함수 선언·함수를 담은 const의 시작 줄
+function functionLines(ast) {
+    const out = new Set();
+    for (const st of ast.body) {
+        const d = st.type.startsWith('Export') && st.declaration ? st.declaration : st;
+        if (isFn(d) || (d.type === 'VariableDeclaration' && d.declarations.every((v) => isFn(v.init)))) {
+            out.add(st.loc.start.line);
+        }
+    }
+    return out;
 }
 
 function checkFile(file) {
     const comments = [];
     const ast = acorn.parse(fs.readFileSync(file, 'utf8'),
         {ecmaVersion: 'latest', sourceType: 'module', onComment: comments, locations: true});
-    const bodies = [];
-    walk.full(ast, (n) => {
-        if (/Function/.test(n.type)) bodies.push([n.body.start, n.body.end]);
-    });
+    const fnLines = functionLines(ast);
+    const firstStart = ast.body[0]?.start ?? Infinity;
     let bad = 0;
     for (const g of groupComments(comments)) {
-        if (bodies.some(([a, b]) => g.start > a && g.start < b)) {
-            console.log(`${file}:${g.line}: 함수 안 주석: ${g.text}`);
-            bad++;
+        const kind = g.start < firstStart ? 'HEAD' : fnLines.has(g.endLine + 1) ? 'FUNC' : 'OTHER';
+        if (listMode) {
+            console.log(`${file}:${g.line} ${kind} ${g.lines.join(' | ')}`);
+            continue;
         }
-        const n = [...g.text].length;
-        if (n > MAX_CHARS) {
-            console.log(`${file}:${g.line}: ${n}자: ${g.text}`);
+        const report = (why, text) => {
+            console.log(`${file}:${g.line}: ${why}: ${text}`);
             bad++;
+        };
+        if (kind === 'HEAD') {
+            for (const l of g.lines) if ([...l].length > MAX_CHARS) report(`머리 주석 ${[...l].length}자`, l);
+        } else if (kind === 'FUNC') {
+            const text = g.lines.join(' ');
+            if ([...text].length > MAX_CHARS) report(`함수 주석 ${[...text].length}자`, text);
+        } else {
+            report('함수 설명 외 주석은 파일 맨 위로', g.lines.join(' '));
         }
     }
     return bad;
 }
 
-const bad = listJS(root).reduce((sum, f) => sum + checkFile(f), 0);
-console.log('위반', bad);
+const files = roots.flatMap((r) => (fs.statSync(r).isDirectory() ? listJS(r) : [r]));
+const bad = files.reduce((sum, f) => sum + checkFile(f), 0);
+if (!listMode) console.log('위반', bad);
 process.exit(bad ? 1 : 0);

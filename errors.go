@@ -1,3 +1,5 @@
+// msg* 문장은 "원인 + 해야 할 일"을 한 문장으로 쓴다.
+
 package main
 
 import (
@@ -13,7 +15,6 @@ import (
 	"simpleEdit/internal/tools"
 )
 
-// 사용자에게 보여줄 문장. "원인 + 해야 할 일"을 한 문장으로.
 const (
 	msgBadURL       = "유튜브 영상 주소가 아닙니다. 유튜브에서 주소를 다시 복사해 칸에 붙여넣은 뒤 \"영상 받기\"를 눌러 주세요."
 	msgBusy         = "다른 작업이 진행 중입니다. 끝날 때까지 기다려 주세요."
@@ -43,7 +44,7 @@ const (
 	msgAutoStale    = "자른 구간이 바뀌어 자동 가리기를 다시 해야 합니다. 3단계에서 \"사람 얼굴 가리기\"를 다시 눌러 주세요."
 )
 
-// userError는 원인을 로그에 남기고 안내 문장을 돌려준다.
+// 원인은 로그에만 남기고, 프론트에는 안내 문장만 보낸다.
 func userError(msg string, err error) error {
 	if err != nil {
 		applog.Printf("오류: %s (원인: %v)", msg, err)
@@ -107,7 +108,7 @@ func analyzeError(err error) error {
 	return userError(msgAnalyzeFail, err)
 }
 
-// toolMissingError는 zip 안 실행이면 압축 풀기를 안내한다.
+// zip 안에서 실행한 것으로 보이면 압축 풀기 안내를 고른다.
 func toolMissingError(err error) error {
 	if tools.RunningFromArchive() {
 		return userError(msgNotExtracted, err)

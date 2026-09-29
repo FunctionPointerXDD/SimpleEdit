@@ -1,3 +1,5 @@
+// 대조 테스트는 런타임·모델 경로가 없으면 건너뛴다.
+
 package detect
 
 import (
@@ -13,7 +15,6 @@ import (
 	"simpleEdit/internal/frame"
 )
 
-// 대조 테스트용 런타임·모델 경로 (없으면 건너뜀)
 const (
 	envORTLib = "SIMPLEEDIT_ORT_LIB"
 	envModels = "SIMPLEEDIT_MODELS"
@@ -24,7 +25,6 @@ type goldenFace struct {
 	Score float32    `json:"score"`
 }
 
-// OpenCV FaceDetectorYN 결과와 박스·점수를 대조한다.
 func TestYuNetMatchesOpenCV(t *testing.T) {
 	det := openFaceDetector(t)
 	data, err := os.ReadFile("testdata/yunet_golden.json")

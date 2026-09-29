@@ -1,3 +1,7 @@
+// Rect는 레터박스를 뺀 영상 영역 기준 0~1 좌표, PixelRect는 원본 px(짝수)다.
+// mosaicBlock은 ffmpeg 필터 모자이크 한 칸 크기(원본 px)다.
+// ExportSpec.Start·Duration은 초 단위다.
+
 package media
 
 import (
@@ -7,13 +11,10 @@ import (
 	"strings"
 )
 
-// MaxRects는 한 번에 가릴 수 있는 사각형 개수다.
 const MaxRects = 5
 
-// mosaicBlock은 모자이크 한 칸의 크기(원본 픽셀)다.
 const mosaicBlock = 16
 
-// Rect는 레터박스를 뺀 영상 영역 기준 0~1 좌표다.
 type Rect struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
@@ -21,15 +22,13 @@ type Rect struct {
 	H float64 `json:"h"`
 }
 
-// PixelRect는 원본 해상도 기준 정수 좌표다. 폭·높이는 짝수.
 type PixelRect struct {
 	X, Y, W, H int
 }
 
-// minRectPx보다 작은 사각형은 실수로 클릭한 것으로 보고 버린다.
 const minRectPx = 4
 
-// ToPixels는 원본 좌표로 바꾼다. 쓸 수 없으면 ok=false.
+// 0~1로 자른 뒤 px로 바꿔 위치는 짝수 내림, 크기는 짝수 올림. minRectPx 미만은 false
 func ToPixels(r Rect, width, height int) (PixelRect, bool) {
 	x0 := clamp(r.X, 0, 1) * float64(width)
 	y0 := clamp(r.Y, 0, 1) * float64(height)
@@ -52,7 +51,6 @@ func ToPixels(r Rect, width, height int) (PixelRect, bool) {
 	return PixelRect{X: x, Y: y, W: w, H: h}, true
 }
 
-// RectsToPixels는 여러 사각형을 변환하고, 쓸 수 없는 것은 뺀다.
 func RectsToPixels(rs []Rect, width, height int) []PixelRect {
 	out := make([]PixelRect, 0, len(rs))
 	for _, r := range rs {
@@ -63,7 +61,7 @@ func RectsToPixels(rs []Rect, width, height int) []PixelRect {
 	return out
 }
 
-// MosaicFilter는 모자이크 필터를 만든다. 출력은 [v].
+// split으로 나눠 사각형마다 crop→축소→nearest 확대 후 차례로 overlay한다. 출력은 [v]
 func MosaicFilter(rects []PixelRect) string {
 	if len(rects) == 0 {
 		return ""
@@ -91,17 +89,16 @@ func MosaicFilter(rects []PixelRect) string {
 	return b.String()
 }
 
-// ExportSpec은 저장 명령을 만드는 데 필요한 값이다.
 type ExportSpec struct {
 	Source   string
 	Output   string
-	Start    float64 // 초
-	Duration float64 // 초
+	Start    float64
+	Duration float64
 	Rects    []PixelRect
 	Mute     bool
 }
 
-// ExportArgs는 저장용 ffmpeg 인자. yuv420p로 호환성 확보
+// 사각형이 있으면 filter_complex로 가리고, H.264 yuv420p로 인코딩한다.
 func ExportArgs(s ExportSpec) []string {
 	args := []string{
 		"-hide_banner", "-y",
@@ -125,7 +122,7 @@ func ExportArgs(s ExportSpec) []string {
 	return args
 }
 
-// PreviewArgs는 720p H.264 미리보기용 인자다.
+// 높이 720 이하로 줄여 ultrafast H.264 + AAC로 만든다.
 func PreviewArgs(source, output string) []string {
 	return []string{
 		"-hide_banner", "-y",
@@ -141,7 +138,7 @@ func PreviewArgs(source, output string) []string {
 	}
 }
 
-// audioArgs는 input번 입력의 소리를 AAC로 넣거나 뺀다.
+// mute면 -an, 아니면 input번 입력의 첫 소리(없어도 됨)를 AAC로 넣는다.
 func audioArgs(mute bool, input int) []string {
 	if mute {
 		return []string{"-an"}

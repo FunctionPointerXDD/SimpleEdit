@@ -14,7 +14,7 @@ import (
 	"simpleEdit/internal/tools"
 )
 
-// useTools는 ffmpeg가 있는 bin 폴더를 쓰게 하고, 없으면 건너뛴다.
+// SIMPLEEDIT_BIN(없으면 tools/linux)에 ffmpeg가 없으면 건너뛰고, 있으면 그 폴더를 쓴다.
 func useTools(t *testing.T) {
 	t.Helper()
 	dir := os.Getenv(tools.EnvBinDir)
@@ -29,7 +29,7 @@ func useTools(t *testing.T) {
 	t.Setenv(tools.EnvBinDir, dir)
 }
 
-// makeSource는 잡음 없는 움직이는 테스트 영상을 만든다.
+// testsrc 영상과 440Hz 소리로 잡음 없는 원본을 만든다.
 func makeSource(t *testing.T, w, h int, seconds float64) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "src.mp4")
@@ -52,7 +52,6 @@ func probeSpec(t *testing.T, path string, start, dur float64) PipeSpec {
 	return PipeSpec{Source: path, Start: start, Duration: dur, FPS: info.FPS, Width: info.Width, Height: info.Height}
 }
 
-// grabFrame은 n번째 프레임을 복사해 돌려준다.
 func grabFrame(t *testing.T, s PipeSpec, n int) frame.Frame {
 	t.Helper()
 	var got frame.Frame
@@ -71,7 +70,7 @@ func grabFrame(t *testing.T, s PipeSpec, n int) frame.Frame {
 	return got
 }
 
-// changedBounds는 8×8 칸 평균 차가 큰 영역의 경계다.
+// 8×8 칸 평균 차가 threshold를 넘는 칸들의 경계
 func changedBounds(a, b frame.Frame, threshold float64) image.Rectangle {
 	const cell = 8
 	var r image.Rectangle

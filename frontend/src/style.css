@@ -211,7 +211,8 @@ b { color: var(--primary-dark); }
 }
 .player-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
 .mask-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
-.seek-wrap { position: relative; height: 40px; display: flex; align-items: center; }
+.seek-row { display: flex; align-items: center; gap: 16px; }
+.seek-wrap { position: relative; flex: 1; height: 40px; display: flex; align-items: center; }
 .seek-marks { position: absolute; left: 12px; right: 12px; top: 8px; bottom: 8px; pointer-events: none; }
 .seek-selection {
     position: absolute; top: 0; bottom: 0;
@@ -230,7 +231,7 @@ b { color: var(--primary-dark); }
 }
 .player-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .btn.play { min-width: 130px; background: var(--text); border-color: var(--text); color: #fff; }
-.clock { margin-left: auto; font-size: 24px; font-weight: bold; font-variant-numeric: tabular-nums; }
+.clock { white-space: nowrap; font-size: 24px; font-weight: bold; font-variant-numeric: tabular-nums; }
 
 /* ── 2단계: 시작/끝 ───────────────────────────── */
 .mark-row { display: flex; align-items: stretch; gap: 16px; }

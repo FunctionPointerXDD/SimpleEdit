@@ -1,3 +1,5 @@
+// Box는 원본 프레임 픽셀 좌표와 점수다.
+
 // Package detect는 ONNX 모델로 얼굴·번호판을 찾는다.
 package detect
 
@@ -7,13 +9,12 @@ import (
 	"simpleEdit/internal/frame"
 )
 
-// Box는 원본 프레임 픽셀 기준 검출 결과다.
 type Box struct {
 	X, Y, W, H float32
 	Score      float32
 }
 
-// Letterbox는 왼쪽 위 정렬·pad 채움 CHW(BGR)를 만든다.
+// 긴 변이 size를 넘으면 줄여 왼쪽 위에 두고, 남은 칸은 pad로 채운 CHW(BGR)
 func Letterbox(f frame.Frame, size int, pad float32, dst []float32) (scale float32) {
 	scale = min(1, float32(size)/float32(max(f.W, f.H)))
 	nw := int(math.Round(float64(float32(f.W) * scale)))
@@ -30,7 +31,7 @@ func Letterbox(f frame.Frame, size int, pad float32, dst []float32) (scale float
 	return scale
 }
 
-// copyPlanes는 크기 변경 없이 채널별로 옮긴다.
+// 줄이지 않을 때 HWC 바이트를 채널별 평면으로 옮긴다.
 func copyPlanes(f frame.Frame, size int, dst []float32) {
 	plane := size * size
 	for y := 0; y < f.H; y++ {
@@ -44,7 +45,7 @@ func copyPlanes(f frame.Frame, size int, dst []float32) {
 	}
 }
 
-// resizeBilinear는 INTER_LINEAR식 픽셀 중심 보간이다.
+// OpenCV INTER_LINEAR처럼 픽셀 중심 좌표로 쌍선형 보간한다.
 func resizeBilinear(f frame.Frame, nw, nh, size int, dst []float32) {
 	plane := size * size
 	sx := float32(f.W) / float32(nw)
@@ -71,7 +72,7 @@ func resizeBilinear(f frame.Frame, nw, nh, size int, dst []float32) {
 	}
 }
 
-// splitCoord는 좌표를 정수 칸과 가중치로 나눈다.
+// 음수는 0, 끝을 넘으면 n-1에 붙이고 정수부와 소수부로 나눈다.
 func splitCoord(v float32, n int) (int, float32) {
 	if v <= 0 {
 		return 0, 0

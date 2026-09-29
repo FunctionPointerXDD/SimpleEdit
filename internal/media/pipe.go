@@ -1,3 +1,5 @@
+// FrameFunc는 n번째 프레임을 제자리에서 고친다. 반환 뒤 버퍼는 다시 쓰인다.
+
 package media
 
 import (
@@ -13,7 +15,6 @@ import (
 	"simpleEdit/internal/tools"
 )
 
-// PipeSpec은 프레임 단위 처리에 필요한 값이다.
 type PipeSpec struct {
 	Source   string
 	Start    float64
@@ -24,23 +25,21 @@ type PipeSpec struct {
 	Mute     bool
 }
 
-// FrameFunc는 n번째 프레임을 제자리에서 고친다.
 type FrameFunc func(n int, f frame.Frame) error
 
-// 디코더와 처리 사이에 돌려 쓰는 프레임 버퍼 수
 const pipeBuffers = 3
 
-// FrameCount는 구간의 예상 프레임 수다.
+// 길이 × fps를 반올림한다. 최소 1
 func (s PipeSpec) FrameCount() int {
 	return max(1, int(s.Duration*s.FPS+0.5))
 }
 
-// evenSize는 yuv420p 인코딩용으로 짝수로 내린다.
+// yuv420p 인코딩을 위해 짝수로 내린다. 최소 2
 func (s PipeSpec) evenSize() (int, int) {
 	return max(2, s.Width&^1), max(2, s.Height&^1)
 }
 
-// DecodeArgs는 고정 fps bgr24 원시 프레임을 stdout으로 낸다.
+// 구간을 fps 필터로 고정 fps로 만들고 짝수 크기 bgr24로 stdout에 낸다.
 func DecodeArgs(s PipeSpec) []string {
 	w, h := s.evenSize()
 	return []string{
@@ -55,7 +54,7 @@ func DecodeArgs(s PipeSpec) []string {
 	}
 }
 
-// EncodeArgs는 stdin 원시 프레임과 원본 소리로 MP4를 만든다.
+// stdin 원시 프레임을 H.264로 인코딩하고, 무음이 아니면 원본 구간 소리를 붙인다.
 func EncodeArgs(s PipeSpec, output string) []string {
 	w, h := s.evenSize()
 	args := []string{
@@ -81,7 +80,7 @@ func EncodeArgs(s PipeSpec, output string) []string {
 
 func rate(fps float64) string { return strconv.FormatFloat(fps, 'f', 6, 64) }
 
-// ProcessFrames는 디코딩→fn→인코딩. 실패 시 output 삭제
+// 디코딩 → fn → 인코더 stdin. 실패하면 인코더를 멈추고 output을 지운다.
 func ProcessFrames(parent context.Context, s PipeSpec, output string, fn FrameFunc, onProgress ProgressFunc) (err error) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
@@ -135,7 +134,7 @@ func ProcessFrames(parent context.Context, s PipeSpec, output string, fn FrameFu
 	return nil
 }
 
-// DecodeFrames는 버퍼를 돌려 쓰며 프레임을 fn에 넘긴다.
+// 읽기 고루틴과 버퍼 pipeBuffers개를 돌려 쓰고, fn이 실패하면 디코더를 취소한다.
 func DecodeFrames(ctx context.Context, s PipeSpec, fn FrameFunc) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -205,7 +204,6 @@ func DecodeFrames(ctx context.Context, s PipeSpec, fn FrameFunc) error {
 	return nil
 }
 
-// PixelateRects는 고정 사각형들을 모자이크하는 FrameFunc다.
 func PixelateRects(rects []PixelRect) FrameFunc {
 	return func(_ int, f frame.Frame) error {
 		for _, r := range rects {

@@ -11,7 +11,6 @@ var noExpand = TrackOptions{MatchIoU: 0.2, MaxGap: 6, Hold: 2, Expand: 0, Strong
 
 func rect(x, y, w, h float64) media.Rect { return media.Rect{X: x, Y: y, W: w, H: h} }
 
-// strong은 강한 점수 검출 목록을 만든다.
 func strong(rs ...media.Rect) []Det { return withScore(0.9, rs...) }
 
 func withScore(score float32, rs ...media.Rect) []Det {
@@ -22,7 +21,6 @@ func withScore(score float32, rs ...media.Rect) []Det {
 	return out
 }
 
-// trackRects는 뺀 트랙 없이 사각형으로 바꿔 돌려준다.
 func trackRects(samples []Sample, frames int, o TrackOptions) ([][]media.Rect, TrackStats) {
 	boxes, st := Track(samples, frames, o)
 	return Rects(boxes, nil), st

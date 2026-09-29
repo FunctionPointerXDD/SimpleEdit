@@ -1,6 +1,6 @@
 import {h} from './ui/dom.js';
 
-// 한 단계씩 보이는 마법사. step.mount(root, ctx)
+// steps[i].mount(root, ctx)로 그리고, 옮기기 전에 이전 단계를 unmount한다.
 export function createWizard(root, steps) {
     const stepLabel = h('div.step-label');
     const stepDots = h('ol.step-dots', {}, steps.map((s, i) => h('li', {}, `${i + 1}. ${s.title}`)));

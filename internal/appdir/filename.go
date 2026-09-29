@@ -1,3 +1,5 @@
+// maxNameLen은 확장자를 뺀 글자 수 기준이다.
+
 package appdir
 
 import (
@@ -9,7 +11,6 @@ import (
 	"unicode/utf8"
 )
 
-// 파일 이름 오류. app에서 안내 문장으로 바꾼다.
 var (
 	ErrNameEmpty    = errors.New("파일 이름 없음")
 	ErrNameBadChar  = errors.New("쓸 수 없는 글자")
@@ -17,18 +18,15 @@ var (
 	ErrNameTooLong  = errors.New("이름이 너무 김")
 )
 
-// Windows 파일 이름에 쓸 수 없는 글자
 const badNameChars = `\/:*?"<>|`
 
-// 이름 길이 상한 (확장자 제외, 글자 수)
 const maxNameLen = 100
 
-// DefaultFileName은 확장자 없는 기본 파일 이름이다.
 func DefaultFileName(now time.Time) string {
 	return "운전강의_" + now.Format("20060102_1504")
 }
 
-// CleanFileName은 이름을 검사하고 .mp4를 뗀 값을 준다.
+// 앞뒤 공백과 .mp4, 끝의 점·공백을 떼고 빈 값·금지 글자·장치 이름·길이를 본다.
 func CleanFileName(name string) (string, error) {
 	s := strings.TrimSpace(name)
 	if strings.EqualFold(filepath.Ext(s), ".mp4") {
@@ -50,7 +48,7 @@ func CleanFileName(name string) (string, error) {
 
 func isControl(r rune) bool { return r < 32 }
 
-// isReserved는 CON, NUL, COM1 같은 장치 이름인지 본다.
+// 첫 점 앞부분을 대문자로 바꿔 CON, PRN, AUX, NUL, COM1~9, LPT1~9와 비교
 func isReserved(s string) bool {
 	base, _, _ := strings.Cut(strings.ToUpper(s), ".")
 	switch base {
@@ -63,7 +61,7 @@ func isReserved(s string) bool {
 	return false
 }
 
-// OutputPath는 dir\name.mp4. 이미 있으면 _2, _3을 붙인다.
+// dir\name.mp4가 이미 있으면 _2, _3을 붙여 빈 이름을 찾는다.
 func OutputPath(dir, name string) string {
 	p := filepath.Join(dir, name+".mp4")
 	for i := 2; fileExists(p); i++ {

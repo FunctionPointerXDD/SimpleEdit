@@ -1,3 +1,5 @@
+// 창은 최대화로 시작하고, 주소 칸 오른쪽 클릭 붙여넣기를 위해 기본 메뉴를 켠다.
+
 package main
 
 import (
@@ -13,7 +15,6 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// 최대화로 시작, 주소 칸 오른쪽 클릭 붙여넣기 허용
 func main() {
 	app := NewApp()
 

@@ -75,7 +75,7 @@ function installMock({video, meta}) {
             const fps = 30;
             const n = Math.round((req.end - req.start) * fps);
             const frames = Array.from({length: n}, (_, i) => [[0.35 + 0.1 * i / n, 0.2, 0.2, 0.3, 1]]);
-            return {kind: req.kind, start: req.start, duration: req.end - req.start, fps, frames, found: n};
+            return {kind: req.kind, start: req.start, duration: req.end - req.start, fps, frames, found: n, tracks: 1};
         },
         Export: async (req) => {
             window.__mock.exportReq = req;
@@ -166,12 +166,41 @@ await page.waitForTimeout(200);
 await shot('2-trim');
 const vals = await page.$$eval('.mark-card .value', (els) => els.map((e) => e.textContent));
 check('시작/끝/길이 표시', vals[0] === '00:03.0' && vals[1] === '00:13.5' && vals[2] === '10.5초', JSON.stringify(vals));
+const nowAt = () => page.evaluate(() => document.querySelector('video').currentTime);
+const controlsFit = () => page.evaluate(() => {
+    const tops = [...document.querySelectorAll('.player-controls > *')].map((e) => {
+        const r = e.getBoundingClientRect();
+        return Math.round(r.top + r.height / 2);
+    });
+    const nav = document.querySelector('.navbar').getBoundingClientRect();
+    const ok = new Set(tops).size === 1 && nav.bottom <= window.innerHeight;
+    return ok || `줄 ${[...new Set(tops)]}, 다음 아래끝 ${Math.round(nav.bottom)} / 화면 ${window.innerHeight}`;
+});
+await seekTo(5);
+await page.waitForTimeout(200);
+await click('1초 앞으로');
+await page.waitForTimeout(200);
+const plusOne = await nowAt();
+await click('1초 뒤로');
+await page.waitForTimeout(200);
+check('2단계 1초 앞뒤 버튼', Math.abs(plusOne - 6) < 0.05 && Math.abs((await nowAt()) - 5) < 0.05, String(plusOne));
+const fit2 = await controlsFit();
+check('2단계 조작 버튼 한 줄, 다음 버튼 보임', fit2 === true, String(fit2));
 
 // 3단계: 직접 가릴 곳
 await click('다음 ▶');
 await videoReady();
 check('3단계도 같은 video 요소', await page.evaluate(() => document.querySelector('video').__mark === 'same'));
 check('3단계 시작 위치 = 시작 지점', await page.evaluate(() => Math.abs(document.querySelector('video').currentTime - 3) < 0.05));
+await click('1초 앞으로');
+await page.waitForTimeout(200);
+const maskPlus = await nowAt();
+await click('1초 뒤로');
+await click('1초 뒤로');
+await page.waitForTimeout(200);
+check('3단계 1초 앞뒤 버튼, 구간 밖으로 안 나감', Math.abs(maskPlus - 4) < 0.05 && Math.abs((await nowAt()) - 3) < 0.05, String(maskPlus));
+const fit3 = await controlsFit();
+check('3단계 조작 버튼 한 줄, 다음 버튼 보임', fit3 === true, String(fit3));
 await page.waitForTimeout(300);
 const box = await page.$eval('video', (v) => {
     const r = v.getBoundingClientRect();
@@ -225,6 +254,15 @@ await shot('3-excluded');
 await clickAt(0.45, 0.35);
 check('다시 누르면 되살아남', (await orangeCount()) > 100);
 await clickAt(0.45, 0.35);
+
+// 직접 가림이 꽉 차도 주황 박스는 뺄 수 있어야 함
+for (const fy of [0.05, 0.12, 0.19]) await drag(0.02, fy, 0.08, fy + 0.05);
+check('직접 가림 5개', (await page.$$('.rect-list li:not(.empty)')).length === 5);
+await clickAt(0.45, 0.35);
+check('꽉 차도 주황 박스 빼기', (await page.textContent('.guide-line')).includes('자동 가림'));
+await clickAt(0.45, 0.35);
+for (let i = 0; i < 3; i++) await page.locator('.rect-list li button').last().click();
+check('직접 가림 2개로 되돌림', (await page.$$('.rect-list li:not(.empty)')).length === 2);
 
 // 3단계: 소리 없애기
 check('처음엔 소리 켜짐', await page.evaluate(() => document.querySelector('video').muted === false));

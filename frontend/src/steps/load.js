@@ -1,3 +1,5 @@
+// 1단계: 유튜브 주소로 받기 또는 내 영상 열기
+
 import {h} from '../ui/dom.js';
 import {createMessage} from '../ui/message.js';
 import {createProgress} from '../ui/progress.js';
@@ -13,7 +15,6 @@ const STAGE_TEXT = {
     convert: '미리보기를 준비하는 중입니다…',
 };
 
-// 1단계: 유튜브 주소로 받기 또는 내 영상 열기
 export const loadStep = {
     title: '영상 불러오기',
     mount(root, ctx) {

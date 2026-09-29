@@ -23,7 +23,7 @@ done
 
 win=(env CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ GOOS=windows)
 echo "== Go 테스트"
-(cd "$root" && go test ./internal/... -count=1 | grep -v "no test files")
+(cd "$root" && go test . ./internal/... -count=1 | grep -v "no test files")
 echo "== Windows 대상 vet (cgo)"
 (cd "$root" && "${win[@]}" go vet ./... && echo ok)
 echo "== staticcheck (Windows 대상)"

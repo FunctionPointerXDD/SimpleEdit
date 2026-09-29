@@ -1,3 +1,6 @@
+// Options.Step은 몇 프레임마다 검출할지, DetectSize는 검출용 긴 변(px)이다.
+// Result.Found는 거르기 전 검출 수, Stats.Kept는 남긴 트랙 수다.
+
 package automask
 
 import (
@@ -10,26 +13,23 @@ import (
 	"simpleEdit/internal/media"
 )
 
-// Detector는 프레임에서 박스를 찾는다. (FaceDetector 등)
 type Detector interface {
 	Detect(f frame.Frame) ([]detect.Box, error)
 }
 
-// Options는 분석 간격·크기와 추적 설정이다.
 type Options struct {
-	Step       int // 몇 프레임마다 검출할지
-	DetectSize int // 검출용으로 줄일 긴 변 픽셀
+	Step       int
+	DetectSize int
 	Track      TrackOptions
 }
 
-// 시간 기준 설정: 초당 검출 횟수, 이어 줄 공백, 앞뒤 유지
 const (
 	detectPerSecond = 30
 	maxGapSeconds   = 0.5
 	holdSeconds     = 0.3
 )
 
-// OptionsFor는 fps에 맞춰 프레임 단위 설정을 만든다.
+// 초 단위 상수에 fps를 곱해 프레임 수로 바꾼다. 최소 1프레임
 func OptionsFor(fps float64) Options {
 	frames := func(sec float64) int { return max(1, int(math.Round(sec*fps))) }
 	t := DefaultTrackOptions
@@ -42,7 +42,6 @@ func OptionsFor(fps float64) Options {
 	}
 }
 
-// Result는 구간의 프레임별 자동 박스다. 좌표는 0~1 비율
 type Result struct {
 	Start    float64      `json:"start"`
 	Duration float64      `json:"duration"`
@@ -52,7 +51,7 @@ type Result struct {
 	Stats    TrackStats   `json:"-"`
 }
 
-// Analyze는 줄인 프레임에서 검출하고 추적 결과를 만든다.
+// Collect로 검출을 모은 뒤 Track으로 잇고 거른다.
 func Analyze(ctx context.Context, s media.PipeSpec, det Detector, o Options, onProgress media.ProgressFunc) (Result, error) {
 	samples, frames, found, err := Collect(ctx, s, det, o, onProgress)
 	if err != nil {
@@ -65,7 +64,7 @@ func Analyze(ctx context.Context, s media.PipeSpec, det Detector, o Options, onP
 	}, nil
 }
 
-// Collect는 검출만 모은다. 추적 설정 비교용으로도 쓴다.
+// DetectSize로 줄여 디코딩하고 Step 프레임마다 검출해 비율 좌표로 모은다.
 func Collect(ctx context.Context, s media.PipeSpec, det Detector, o Options, onProgress media.ProgressFunc) (samples []Sample, frames, found int, err error) {
 	ds := s
 	ds.Width, ds.Height = detectSize(s.Width, s.Height, o.DetectSize)
@@ -92,7 +91,7 @@ func Collect(ctx context.Context, s media.PipeSpec, det Detector, o Options, onP
 	return samples, frames, found, err
 }
 
-// detectSize는 긴 변을 limit 이하로, 짝수로 줄인다.
+// 긴 변이 limit를 넘으면 비율대로 줄이고, 두 변을 짝수로 내린다.
 func detectSize(w, h, limit int) (int, int) {
 	if limit <= 0 || max(w, h) <= limit {
 		return w &^ 1, h &^ 1
@@ -112,7 +111,7 @@ func normalize(boxes []detect.Box, w, h int) []Det {
 	return out
 }
 
-// PixelateFunc는 수동 사각형과 n번째 자동 박스를 함께 가린다.
+// 프레임마다 수동 사각형과 n번째 자동 박스를 차례로 모자이크한다.
 func PixelateFunc(manual []media.Rect, auto [][]media.Rect) media.FrameFunc {
 	return func(n int, f frame.Frame) error {
 		for _, r := range manual {
@@ -127,13 +126,12 @@ func PixelateFunc(manual []media.Rect, auto [][]media.Rect) media.FrameFunc {
 	}
 }
 
-// 모자이크 한 변의 최대 칸 수와 최소 칸 크기
 const (
 	maxCells     = 8
 	minBlockSize = 16
 )
 
-// pixelate는 비율 좌표를 픽셀로 바꿔 모자이크한다.
+// 비율 좌표를 바깥쪽으로 반올림해 픽셀로 바꾼 뒤 blockSize 칸으로 모자이크
 func pixelate(f frame.Frame, r media.Rect) {
 	px := image.Rect(
 		int(math.Floor(r.X*float64(f.W))), int(math.Floor(r.Y*float64(f.H))),
@@ -142,7 +140,7 @@ func pixelate(f frame.Frame, r media.Rect) {
 	f.Pixelate(px, blockSize(px))
 }
 
-// blockSize는 한 변이 maxCells칸 이하가 되게 칸을 키운다.
+// 긴 변이 maxCells칸 이하가 되게 칸을 키우되 minBlockSize보다 작지 않게
 func blockSize(r image.Rectangle) int {
 	return max(minBlockSize, (max(r.Dx(), r.Dy())+maxCells-1)/maxCells)
 }

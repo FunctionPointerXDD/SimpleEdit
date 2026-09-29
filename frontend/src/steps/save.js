@@ -1,3 +1,5 @@
+// 4단계: 이름·위치를 정해 MP4로 저장
+
 import {h} from '../ui/dom.js';
 import {createMessage} from '../ui/message.js';
 import {createProgress} from '../ui/progress.js';
@@ -7,7 +9,6 @@ import {formatClock, formatLength} from '../util/time.js';
 
 const STAGE_TEXT = {export: '영상을 저장하는 중입니다…'};
 
-// 4단계: 이름·위치를 정해 MP4로 저장
 export const saveStep = {
     title: '저장하기',
     lastStep: true,

@@ -1,9 +1,10 @@
+// current는 단계 사이에 공유하는 video 요소 하나다.
+
 import {h} from '../ui/dom.js';
 
-// 단계 사이에 공유하는 video 요소 하나
 let current = null;
 
-// url의 video를 돌려준다. 다른 url이면 새로 연다.
+// 같은 url이면 기존 요소를 그대로 쓰고, 다르면 이전 것을 닫고 새로 만든다.
 export function openVideo(url) {
     if (current?.url === url) return current.video;
     closeVideo();
@@ -15,7 +16,7 @@ export function openVideo(url) {
     return video;
 }
 
-// 영상을 닫고 파일 연결을 놓는다.
+// src를 떼고 load()해 파일 연결을 놓는다.
 export function closeVideo() {
     if (!current) return;
     const {video} = current;
