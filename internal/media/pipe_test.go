@@ -128,29 +128,39 @@ func TestProcessFramesLengthAndAudio(t *testing.T) {
 	}
 }
 
-func TestPipeMosaicMatchesFilterPosition(t *testing.T) {
+func TestPipeBlurMatchesFilterPosition(t *testing.T) {
 	useTools(t)
 	src := makeSource(t, 320, 240, 3)
 	s := probeSpec(t, src, 0.5, 1.5)
-	rect := PixelRect{X: 64, Y: 48, W: 128, H: 96}
-	dir := t.TempDir()
-	pipeOut := filepath.Join(dir, "pipe.mp4")
-	filterOut := filepath.Join(dir, "filter.mp4")
-	if err := ProcessFrames(context.Background(), s, pipeOut, PixelateRects([]PixelRect{rect}), nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := Export(context.Background(), ExportSpec{Source: src, Output: filterOut, Start: 0.5, Duration: 1.5, Rects: []PixelRect{rect}}, nil); err != nil {
-		t.Fatal(err)
-	}
-	want := image.Rect(rect.X, rect.Y, rect.X+rect.W, rect.Y+rect.H)
 	orig := grabFrame(t, s, 20)
-	for name, path := range map[string]string{"pipe": pipeOut, "filter": filterOut} {
-		got := grabFrame(t, PipeSpec{Source: path, Duration: 1.5, FPS: s.FPS, Width: s.Width, Height: s.Height}, 20)
-		b := changedBounds(orig, got, 12)
-		if b.Empty() || !b.In(want.Inset(-8)) {
-			t.Errorf("%s: 바뀐 영역 %v, 사각형 %v 밖으로 나감", name, b, want)
+	for _, rect := range []PixelRect{{X: 64, Y: 48, W: 128, H: 96}, {X: 32, Y: 160, W: 256, H: 48}} {
+		dir := t.TempDir()
+		pipeOut := filepath.Join(dir, "pipe.mp4")
+		filterOut := filepath.Join(dir, "filter.mp4")
+		if err := ProcessFrames(context.Background(), s, pipeOut, BlurRects([]PixelRect{rect}), nil); err != nil {
+			t.Fatal(err)
 		}
-		t.Logf("%s: 바뀐 영역 %v (사각형 %v)", name, b, want)
+		if err := Export(context.Background(), ExportSpec{Source: src, Output: filterOut, Start: 0.5, Duration: 1.5, Rects: []PixelRect{rect}}, nil); err != nil {
+			t.Fatal(err)
+		}
+		want := image.Rect(rect.X, rect.Y, rect.X+rect.W, rect.Y+rect.H)
+		for name, path := range map[string]string{"pipe": pipeOut, "filter": filterOut} {
+			got := grabFrame(t, PipeSpec{Source: path, Duration: 1.5, FPS: s.FPS, Width: s.Width, Height: s.Height}, 20)
+			b := changedBounds(orig, got, 12)
+			if b.Empty() || !b.In(want.Inset(-8)) {
+				t.Errorf("%s %v: 바뀐 영역 %v가 사각형 밖으로 나감", name, want, b)
+			}
+			om, gm := meanColor(orig, want.Inset(4)), meanColor(got, want.Inset(4))
+			for c := range om {
+				if d := om[c] - gm[c]; d > 20 || d < -20 {
+					t.Errorf("%s %v: 블러 전후 평균색이 다름 %v → %v (얼룩)", name, want, om, gm)
+					break
+				}
+			}
+			if step := maxRowStep(got, want.Inset(2)); step > 12 {
+				t.Errorf("%s %v: 이웃 줄 밝기 차 %.1f (줄무늬)", name, want, step)
+			}
+		}
 	}
 }
 
@@ -235,4 +245,37 @@ func TestMuteRemovesAudio(t *testing.T) {
 			t.Errorf("%s: 길이 %.3f초", filepath.Base(p), info.Duration)
 		}
 	}
+}
+
+// 사각형 안 채널별 평균. 블러는 평균을 거의 바꾸지 않는다.
+func meanColor(f frame.Frame, r image.Rectangle) [3]float64 {
+	var sum [3]float64
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			o := (y*f.W + x) * 3
+			for c := range sum {
+				sum[c] += float64(f.Pix[o+c])
+			}
+		}
+	}
+	n := float64(r.Dx() * r.Dy())
+	return [3]float64{sum[0] / n, sum[1] / n, sum[2] / n}
+}
+
+// 사각형 안에서 이웃한 두 줄의 평균 밝기 차 중 가장 큰 값
+func maxRowStep(f frame.Frame, r image.Rectangle) float64 {
+	prev, worst := -1.0, 0.0
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		sum := 0
+		for x := r.Min.X; x < r.Max.X; x++ {
+			o := (y*f.W + x) * 3
+			sum += int(f.Pix[o]) + int(f.Pix[o+1]) + int(f.Pix[o+2])
+		}
+		v := float64(sum) / float64(3*r.Dx())
+		if prev >= 0 {
+			worst = max(worst, v-prev, prev-v)
+		}
+		prev = v
+	}
+	return worst
 }

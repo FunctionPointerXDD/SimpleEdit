@@ -28,7 +28,7 @@ export const maskStep = {
                 player.pause();
                 const removed = toggleExcluded(b.kind, b.id);
                 guide.set(removed
-                    ? '이 자동 가림을 뺐습니다. 잘못 뺐으면 회색 네모를 다시 누르세요.'
+                    ? '이 자동 가림을 뺐습니다. 잘못 뺐으면 회색 동그라미를 다시 누르세요.'
                     : '자동 가림을 되살렸습니다.', 'success');
                 overlay.redraw();
             },
@@ -81,6 +81,7 @@ export const maskStep = {
 
         renderList();
         ctx.setNextEnabled(true);
+        auto.resume();
         return {
             unmount() {
                 auto.unmount();

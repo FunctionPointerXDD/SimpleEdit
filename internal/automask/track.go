@@ -2,6 +2,8 @@
 // MatchIoU는 같은 대상으로 볼 최소 IoU, Expand 0.4는 폭·높이를 40% 키운다는 뜻이다.
 // 평균 폭이 Large 이상인 트랙은 최고 점수가 Strong, 아니면 Weak 이상이어야 남는다.
 // 기본 Weak 0은 작은 트랙(멀리 있는 얼굴)을 거르지 않으려는 것이다.
+// ShortDetections보다 적게 검출된 짧은 트랙은 최고 점수가 ShortScore 이상이어야 남는다.
+// 한두 프레임 스친 낮은 점수 오탐이 Hold로 깜빡이는 것을 막고, 드문드문 잡힌 작은 실제 얼굴은 살린다.
 // TrackBox.ID는 남긴 트랙 순서대로 1부터 매긴다.
 
 // Package automask는 자동 검출 박스를 프레임마다 이어 준다.
@@ -22,11 +24,15 @@ type TrackOptions struct {
 	Strong   float32
 	Weak     float32
 	Large    float64
+
+	ShortDetections int
+	ShortScore      float32
 }
 
 var DefaultTrackOptions = TrackOptions{
 	MatchIoU: 0.2, MaxGap: 15, Hold: 8, Expand: 0.4,
 	Strong: 0.7, Weak: 0, Large: 0.08,
+	ShortDetections: 10, ShortScore: 0.8,
 }
 
 type TrackBox struct {
@@ -64,7 +70,7 @@ type obs struct {
 	score float32
 }
 
-// 프레임 순으로 정렬한 복사본을 link로 잇고, 폭에 맞는 점수를 못 넘은 트랙은 버린다.
+// 정렬한 복사본을 link로 잇고, 점수가 폭 기준에 못 미치거나 검출이 적은 트랙은 버린다.
 func Track(samples []Sample, frames int, o TrackOptions) ([][]TrackBox, TrackStats) {
 	sorted := append([]Sample(nil), samples...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Frame < sorted[j].Frame })
@@ -72,7 +78,7 @@ func Track(samples []Sample, frames int, o TrackOptions) ([][]TrackBox, TrackSta
 	var st TrackStats
 	for _, tr := range link(sorted, o) {
 		info := summarize(tr)
-		info.Kept = info.MaxScore >= o.required(info.Width)
+		info.Kept = info.MaxScore >= o.required(info)
 		st.Tracks = append(st.Tracks, info)
 		if !info.Kept {
 			st.Dropped++
@@ -95,12 +101,16 @@ func summarize(tr []obs) TrackInfo {
 	return info
 }
 
-// 평균 폭이 Large 이상이면 Strong, 아니면 Weak
-func (o TrackOptions) required(width float64) float32 {
-	if width >= o.Large {
-		return o.Strong
+// 폭 기준(Large 이상이면 Strong, 아니면 Weak)과 짧은 트랙 기준 중 큰 값
+func (o TrackOptions) required(t TrackInfo) float32 {
+	need := o.Weak
+	if t.Width >= o.Large {
+		need = o.Strong
 	}
-	return o.Weak
+	if t.Detections < o.ShortDetections {
+		need = max(need, o.ShortScore)
+	}
+	return need
 }
 
 // 검출마다 MaxGap 안의 트랙 중 IoU가 가장 큰 곳에 붙이고, 없으면 새 트랙을 연다.

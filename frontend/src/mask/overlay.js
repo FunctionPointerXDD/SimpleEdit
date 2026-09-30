@@ -1,9 +1,13 @@
 // MIN_DRAG_PX보다 작게 끈 것은 클릭으로 보고, 그 자리의 자동 박스를 빼거나 되살린다.
+// 가림 표시는 영상 프레임을 media.BlurSigma와 같은 세기(긴 변 20%)로 흐려 그린다.
+// 자동 얼굴은 저장(frame.BlurEllipse)과 같게 박스에 내접한 타원, 직접 그린 곳은 사각형이다.
 // 직접 가림이 꽉 차도 누른 자리에 자동 박스가 있으면 뺄 수 있다. 겹치면 가장 작은 박스를 고른다.
 
 import {h} from '../ui/dom.js';
 
 const MIN_DRAG_PX = 8;
+const BLUR_SHARE = 0.2;
+const MIN_BLUR_SIGMA = 4;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 // object-fit: contain 비율로 요소 안 실제 영상 영역(px)을 계산한다.
@@ -91,14 +95,15 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
                 drawExcluded(x, y, w, hh);
                 continue;
             }
-            drawMosaicHint(x, y, w, hh);
+            drawBlurHint(box, r, x, y, w, hh, true);
             ctx2d.lineWidth = 3;
             ctx2d.strokeStyle = '#ff9500';
-            ctx2d.strokeRect(x, y, w, hh);
+            shapePath(x, y, w, hh, true);
+            ctx2d.stroke();
         }
         getRects().forEach((r, i) => {
             const [x, y, w, hh] = toPx(r);
-            drawMosaicHint(x, y, w, hh);
+            drawBlurHint(box, r, x, y, w, hh, false);
             ctx2d.lineWidth = 3;
             ctx2d.strokeStyle = '#ff3b30';
             ctx2d.strokeRect(x, y, w, hh);
@@ -118,7 +123,8 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
         ctx2d.setLineDash([6, 6]);
         ctx2d.lineWidth = 2;
         ctx2d.strokeStyle = 'rgba(200,200,200,0.9)';
-        ctx2d.strokeRect(x, y, w, hh);
+        shapePath(x, y, w, hh, true);
+        ctx2d.stroke();
         ctx2d.setLineDash([]);
         ctx2d.font = 'bold 16px "Malgun Gothic", sans-serif';
         ctx2d.textAlign = 'left';
@@ -129,20 +135,33 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
         ctx2d.fillText('빠짐', x + 5, y + 3);
     }
 
-    function drawMosaicHint(x, y, w, hh) {
-        const cell = 12;
-        ctx2d.save();
+    function shapePath(x, y, w, hh, ellipse) {
         ctx2d.beginPath();
-        ctx2d.rect(x, y, w, hh);
+        if (ellipse) ctx2d.ellipse(x + w / 2, y + hh / 2, w / 2, hh / 2, 0, 0, Math.PI * 2);
+        else ctx2d.rect(x, y, w, hh);
+    }
+
+    function drawBlurHint(box, r, x, y, w, hh, ellipse) {
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        ctx2d.save();
+        shapePath(x, y, w, hh, ellipse);
         ctx2d.clip();
-        ctx2d.fillStyle = 'rgba(0,0,0,0.45)';
-        ctx2d.fillRect(x, y, w, hh);
-        ctx2d.fillStyle = 'rgba(255,255,255,0.18)';
-        for (let row = 0; y + row * cell < y + hh; row++) {
-            for (let xx = x + (row % 2) * cell; xx < x + w; xx += cell * 2) {
-                ctx2d.fillRect(xx, y + row * cell, cell, cell);
-            }
+        if (!vw || !vh || video.readyState < 2) {
+            ctx2d.fillStyle = 'rgba(128,128,128,0.8)';
+            ctx2d.fillRect(x, y, w, hh);
+            ctx2d.restore();
+            return;
         }
+        const scale = box.w / vw;
+        const sigma = Math.max(MIN_BLUR_SIGMA * scale, Math.max(w, hh) * BLUR_SHARE);
+        const pad = (sigma * 2) / scale;
+        const sx = Math.max(0, r.x * vw - pad);
+        const sy = Math.max(0, r.y * vh - pad);
+        const sw = Math.min(vw, (r.x + r.w) * vw + pad) - sx;
+        const sh = Math.min(vh, (r.y + r.h) * vh + pad) - sy;
+        ctx2d.filter = `blur(${sigma}px)`;
+        ctx2d.drawImage(video, sx, sy, sw, sh, box.x + sx * scale, box.y + sy * scale, sw * scale, sh * scale);
         ctx2d.restore();
     }
 

@@ -204,10 +204,10 @@ func DecodeFrames(ctx context.Context, s PipeSpec, fn FrameFunc) error {
 	return nil
 }
 
-func PixelateRects(rects []PixelRect) FrameFunc {
+func BlurRects(rects []PixelRect) FrameFunc {
 	return func(_ int, f frame.Frame) error {
 		for _, r := range rects {
-			f.Pixelate(image.Rect(r.X, r.Y, r.X+r.W, r.Y+r.H), mosaicBlock)
+			f.Blur(image.Rect(r.X, r.Y, r.X+r.W, r.Y+r.H), BlurSigma(r.W, r.H))
 		}
 		return nil
 	}

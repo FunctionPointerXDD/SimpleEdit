@@ -63,9 +63,9 @@ ml)
   unzip -q -j -o "$tmp/ort.zip" "*/lib/onnxruntime.dll" -d "$root/tools/windows"
 
   echo "YuNet 얼굴 모델 받는 중 (OpenCV Zoo, MIT)"
-  fetch_checked https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx \
-    "$root/tools/models/face_yunet_2023mar.onnx" \
-    8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
+  fetch_checked https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2026may.onnx \
+    "$root/tools/models/face_yunet_2026may.onnx" \
+    ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0
   ln -sfn ../models "$root/tools/linux/models"
   out="$root/tools/models"
   ;;

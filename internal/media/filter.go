@@ -1,5 +1,11 @@
 // Rect는 레터박스를 뺀 영상 영역 기준 0~1 좌표, PixelRect는 원본 px(짝수)다.
-// mosaicBlock은 ffmpeg 필터 모자이크 한 칸 크기(원본 px)다.
+// 블러 세기는 저장 방식(ffmpeg 필터·Go 프레임)과 미리보기 모두 BlurSigma 한 규칙을 쓴다.
+// 긴 변의 20%면 얼굴 박스 안이 뭉개져 알아볼 수 없고, 작은 박스도 minBlurSigma를 지킨다.
+// 필터도 frame.Blur처럼 시그마가 blurCell 안팎이 되게 줄여 흐린 뒤 키운다(속도 2배 차).
+// 줄인 작은 그림에서 gblur는 가장자리가 깨져(초록·검은 줄) frame.Blur와 같은 boxblur 3회를 쓴다.
+// 작은 yuv420p는 색 평면이 너무 작아 흐릴 때만 gbrp로 바꾼다.
+// boxblur는 2×반지름+1이 짧은 변을 넘으면 값이 틀어져, 짧은 변은 minBlurSide 이상으로 줄이고
+// 반지름은 (짧은 변-1)/2 이하로 둔다.
 // ExportSpec.Start·Duration은 초 단위다.
 
 package media
@@ -13,7 +19,17 @@ import (
 
 const MaxRects = 5
 
-const mosaicBlock = 16
+const (
+	blurShare    = 0.2
+	minBlurSigma = 4
+	blurCell     = 4
+	minBlurSide  = 12
+)
+
+// max(minBlurSigma, 긴 변 × blurShare)를 정수 px로 반올림한다.
+func BlurSigma(w, h int) int {
+	return max(minBlurSigma, int(math.Round(float64(max(w, h))*blurShare)))
+}
 
 type Rect struct {
 	X float64 `json:"x"`
@@ -61,8 +77,8 @@ func RectsToPixels(rs []Rect, width, height int) []PixelRect {
 	return out
 }
 
-// split으로 나눠 사각형마다 crop→축소→nearest 확대 후 차례로 overlay한다. 출력은 [v]
-func MosaicFilter(rects []PixelRect) string {
+// 사각형마다 crop→축소→상자 평균 3회→확대 후 차례로 overlay한다. 출력은 [v]
+func BlurFilter(rects []PixelRect) string {
 	if len(rects) == 0 {
 		return ""
 	}
@@ -72,10 +88,12 @@ func MosaicFilter(rects []PixelRect) string {
 		fmt.Fprintf(&b, "[m%d]", i)
 	}
 	for i, r := range rects {
-		sw := max(1, r.W/mosaicBlock)
-		sh := max(1, r.H/mosaicBlock)
-		fmt.Fprintf(&b, ";[m%d]crop=%d:%d:%d:%d,scale=%d:%d,scale=%d:%d:flags=neighbor[p%d]",
-			i, r.W, r.H, r.X, r.Y, sw, sh, r.W, r.H, i)
+		sigma := BlurSigma(r.W, r.H)
+		k := max(1, min(sigma/blurCell, min(r.W, r.H)/minBlurSide))
+		sw, sh := evenUp((r.W+k-1)/k), evenUp((r.H+k-1)/k)
+		rad := max(1, min((sigma+k/2)/k, (min(sw, sh)-1)/2))
+		fmt.Fprintf(&b, ";[m%d]crop=%d:%d:%d:%d,scale=%d:%d:flags=area,format=gbrp,boxblur=%d:3,format=yuv420p,scale=%d:%d:flags=bilinear[p%d]",
+			i, r.W, r.H, r.X, r.Y, sw, sh, rad, r.W, r.H, i)
 	}
 	prev := "base"
 	for i, r := range rects {
@@ -106,7 +124,7 @@ func ExportArgs(s ExportSpec) []string {
 		"-i", s.Source,
 		"-t", secs(s.Duration),
 	}
-	if f := MosaicFilter(s.Rects); f != "" {
+	if f := BlurFilter(s.Rects); f != "" {
 		args = append(args, "-filter_complex", f, "-map", "[v]")
 	} else {
 		args = append(args, "-map", "0:v:0")
@@ -156,3 +174,5 @@ func evenCeil(v float64) int {
 	n := int(math.Ceil(v - 1e-9))
 	return (n + 1) &^ 1
 }
+
+func evenUp(v int) int { return max(2, (v+1)&^1) }

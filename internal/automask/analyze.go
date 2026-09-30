@@ -43,12 +43,9 @@ func OptionsFor(fps float64) Options {
 }
 
 type Result struct {
-	Start    float64      `json:"start"`
-	Duration float64      `json:"duration"`
-	FPS      float64      `json:"fps"`
-	Frames   [][]TrackBox `json:"frames"`
-	Found    int          `json:"found"`
-	Stats    TrackStats   `json:"-"`
+	Frames [][]TrackBox
+	Found  int
+	Stats  TrackStats
 }
 
 // Collect로 검출을 모은 뒤 Track으로 잇고 거른다.
@@ -58,10 +55,7 @@ func Analyze(ctx context.Context, s media.PipeSpec, det Detector, o Options, onP
 		return Result{}, err
 	}
 	boxes, stats := Track(samples, frames, o.Track)
-	return Result{
-		Start: s.Start, Duration: s.Duration, FPS: s.FPS,
-		Frames: boxes, Found: found, Stats: stats,
-	}, nil
+	return Result{Frames: boxes, Found: found, Stats: stats}, nil
 }
 
 // DetectSize로 줄여 디코딩하고 Step 프레임마다 검출해 비율 좌표로 모은다.
@@ -111,36 +105,30 @@ func normalize(boxes []detect.Box, w, h int) []Det {
 	return out
 }
 
-// 프레임마다 수동 사각형과 n번째 자동 박스를 차례로 모자이크한다.
-func PixelateFunc(manual []media.Rect, auto [][]media.Rect) media.FrameFunc {
+// 프레임마다 수동 사각형은 사각형으로, n번째 자동 박스는 타원으로 블러 처리한다.
+func BlurFunc(manual []media.Rect, auto [][]media.Rect) media.FrameFunc {
 	return func(n int, f frame.Frame) error {
 		for _, r := range manual {
-			pixelate(f, r)
+			blur(f, r, false)
 		}
 		if n < len(auto) {
 			for _, r := range auto[n] {
-				pixelate(f, r)
+				blur(f, r, true)
 			}
 		}
 		return nil
 	}
 }
 
-const (
-	maxCells     = 8
-	minBlockSize = 16
-)
-
-// 비율 좌표를 바깥쪽으로 반올림해 픽셀로 바꾼 뒤 blockSize 칸으로 모자이크
-func pixelate(f frame.Frame, r media.Rect) {
+// 비율 좌표를 바깥쪽으로 반올림해 픽셀로 바꾼 뒤 media.BlurSigma 세기로 흐린다. ellipse면 내접 타원만
+func blur(f frame.Frame, r media.Rect, ellipse bool) {
 	px := image.Rect(
 		int(math.Floor(r.X*float64(f.W))), int(math.Floor(r.Y*float64(f.H))),
 		int(math.Ceil((r.X+r.W)*float64(f.W))), int(math.Ceil((r.Y+r.H)*float64(f.H))),
 	)
-	f.Pixelate(px, blockSize(px))
-}
-
-// 긴 변이 maxCells칸 이하가 되게 칸을 키우되 minBlockSize보다 작지 않게
-func blockSize(r image.Rectangle) int {
-	return max(minBlockSize, (max(r.Dx(), r.Dy())+maxCells-1)/maxCells)
+	if ellipse {
+		f.BlurEllipse(px, media.BlurSigma(px.Dx(), px.Dy()))
+		return
+	}
+	f.Blur(px, media.BlurSigma(px.Dx(), px.Dy()))
 }

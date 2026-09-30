@@ -178,3 +178,28 @@ func TestRectsExcludesTrack(t *testing.T) {
 		}
 	}
 }
+
+func TestTrackShortNeedsHighScore(t *testing.T) {
+	o := noExpand
+	o.Weak, o.Large, o.ShortDetections, o.ShortScore = 0, 0.08, 10, 0.75
+	var samples []Sample
+	for n := 0; n < 12; n++ {
+		dets := withScore(0.65, rect(0.1, 0.1, 0.03, 0.04))
+		if n < 3 {
+			dets = append(dets, withScore(0.7, rect(0.6, 0.1, 0.03, 0.04))...)
+		}
+		if n >= 5 && n < 8 {
+			dets = append(dets, withScore(0.8, rect(0.6, 0.6, 0.03, 0.04))...)
+		}
+		samples = append(samples, Sample{Frame: n, Dets: dets})
+	}
+	_, st := Track(samples, 12, o)
+	if st.Kept != 2 || st.Dropped != 1 {
+		t.Fatalf("긴 트랙과 점수 높은 짧은 트랙만 남아야 함: %+v", st)
+	}
+	for _, tr := range st.Tracks {
+		if tr.Detections == 3 && tr.MaxScore < 0.75 && tr.Kept {
+			t.Errorf("점수 낮은 짧은 트랙이 남음: %+v", tr)
+		}
+	}
+}

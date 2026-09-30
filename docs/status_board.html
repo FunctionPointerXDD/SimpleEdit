@@ -368,7 +368,7 @@
               </tr>
               <tr>
                 <td>F3</td><td>영역 가리기</td><td><span class="st part">구현·부분 확인</span></td>
-                <td>캔버스 드래그, 최대 5개, "지우기", 레터박스를 뺀 영상 영역 기준 0–1 비율 → Go에서 원본 좌표·짝수 변환, 16px 블록 모자이크</td>
+                <td>캔버스 드래그, 최대 5개, "지우기", 레터박스를 뺀 영상 영역 기준 0–1 비율 → Go에서 원본 좌표·짝수 변환, 긴 변 20% 세기 블러(줄여서 상자 평균 3회)</td>
                 <td>1080p 합성 영상 프레임에서 3개 위치 확인, 모의 UI 비율 테스트(가로·세로), <code>TestToPixels</code>, <code>TestMosaicFilter</code></td>
                 <td>실제 720p·세로 영상 저장 결과 대조</td>
               </tr>
@@ -405,7 +405,7 @@
         <h2>3. 2차 범위: 자동 가리기 (feature/auto-mask)</h2>
         <p>질문: "얼굴 박스는 어디서 만들어져 어디에 머물고, 저장할 때 어떻게 쓰이는가?"</p>
         <figure class="diagram">
-          <svg viewBox="0 0 1100 430" role="img" aria-label="분석 단계에서 ffmpeg 축소 디코딩, YuNet 검출, 추적과 오탐 거르기를 거쳐 App 메모리에 트랙 번호가 붙은 박스를 두고, 확인 단계에서 프론트가 주황 박스를 보여 주고 뺄 트랙을 고르며, 저장 단계에서 원본 해상도 디코딩 프레임에 Go가 모자이크해 인코딩하는 흐름" xmlns="http://www.w3.org/2000/svg">
+          <svg viewBox="0 0 1100 430" role="img" aria-label="분석 단계에서 ffmpeg 축소 디코딩, YuNet 검출, 추적과 오탐 거르기를 거쳐 App 메모리에 트랙 번호가 붙은 박스를 두고, 확인 단계에서 프론트가 주황 박스를 보여 주고 뺄 트랙을 고르며, 저장 단계에서 원본 해상도 디코딩 프레임에 Go가 블러해 인코딩하는 흐름" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <marker id="x-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#155eef"/></marker>
               <marker id="x-write" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b45309"/></marker>
@@ -429,7 +429,7 @@
 
             <rect class="st" x="20" y="40" width="180" height="76" rx="8"/><text class="t" x="32" y="64">원본 영상</text><text class="s" x="32" y="84">작업 폴더 또는 로컬 파일</text><text class="s" x="32" y="100">자른 구간만</text>
             <rect class="n" x="235" y="40" width="190" height="76" rx="8"/><text class="t" x="247" y="64">ffmpeg 디코딩</text><text class="s" x="247" y="84">긴 변 640px, 고정 fps</text><text class="s" x="247" y="100">raw bgr24 (DecodeFrames)</text>
-            <rect class="n" x="460" y="40" width="190" height="76" rx="8"/><text class="t" x="472" y="64">YuNet 검출 (CPU)</text><text class="s" x="472" y="84">onnxruntime.dll + 모델</text><text class="s" x="472" y="100">초당 30번, 점수 0.4 이상</text>
+            <rect class="n" x="460" y="40" width="190" height="76" rx="8"/><text class="t" x="472" y="64">YuNet 검출 (CPU)</text><text class="s" x="472" y="84">onnxruntime.dll + 모델</text><text class="s" x="472" y="100">초당 30번, 점수 0.6 이상</text>
             <rect class="n" x="685" y="40" width="190" height="76" rx="8"/><text class="t" x="697" y="64">추적 (Track)</text><text class="s" x="697" y="84">보간 0.5초·유지 0.3초·40%</text><text class="s" x="697" y="100">큰 약한 트랙 버림</text>
             <rect class="mem" x="905" y="40" width="175" height="76" rx="8"/><text class="t" x="917" y="64">App.auto (메모리)</text><text class="s" x="917" y="84">프레임별 박스</text><text class="s" x="917" y="100">+ 트랙 번호</text>
 
@@ -439,7 +439,7 @@
 
             <rect class="st" x="20" y="325" width="180" height="76" rx="8"/><text class="t" x="32" y="349">원본 영상</text><text class="s" x="32" y="369">같은 구간</text>
             <rect class="n" x="235" y="325" width="190" height="76" rx="8"/><text class="t" x="247" y="349">ffmpeg 디코딩</text><text class="s" x="247" y="369">원본 해상도, 같은 fps</text><text class="s" x="247" y="385">n번째 = 분석 n번째</text>
-            <rect class="n" x="460" y="325" width="190" height="76" rx="8"/><text class="t" x="472" y="349">Go 모자이크</text><text class="s" x="472" y="369">자동 박스(뺀 트랙 제외)</text><text class="s" x="472" y="385">+ 직접 가린 곳, 최대 8칸</text>
+            <rect class="n" x="460" y="325" width="190" height="76" rx="8"/><text class="t" x="472" y="349">Go 블러</text><text class="s" x="472" y="369">자동 박스(뺀 트랙 제외)</text><text class="s" x="472" y="385">+ 직접 가린 곳, 최대 8칸</text>
             <rect class="n" x="685" y="325" width="190" height="76" rx="8"/><text class="t" x="697" y="349">ffmpeg 인코딩</text><text class="s" x="697" y="369">H.264 + 원본 소리</text><text class="s" x="697" y="385">소리 없애기면 -an</text>
             <rect class="st" x="905" y="325" width="175" height="76" rx="8"/><text class="t" x="917" y="349">저장 폴더 MP4</text><text class="s" x="917" y="369">기본 바탕화면</text>
 
@@ -460,7 +460,7 @@
           <figcaption data-diagram-explanation="v1">
             위에서 아래로, 한 줄 안에서는 화살표를 따라 읽습니다. <strong>파란 실선</strong>은 데이터가 넘어가는 방향입니다. ① 분석은 줄인 프레임에서 얼굴을 찾고 추적해, 결과(트랙 번호가 붙은 프레임별 박스)를 <strong>Go 앱 메모리(App.auto, 노란 상자)</strong>에만 둡니다. DB나 파일에는 쓰지 않으며, 새 영상·새 편집·앱 종료 때 사라집니다.
             ② 확인에서는 같은 결과를 줄인 JSON으로 프론트에 보내 주황 박스로 그리고, 사용자가 클릭한 트랙 번호를 저장 요청에 담습니다. 프론트는 App.auto를 바꾸지 않습니다.
-            ③ 저장에서 <strong>회색 점선</strong>은 Go 모자이크가 App.auto를 <strong>읽기만</strong> 하는 관계입니다. 분석과 같은 fps로 원본 해상도를 디코딩하므로 n번째 프레임이 분석의 n번째와 같은 장면이고, 저장할 때 검출을 다시 하지 않습니다. <strong>주황 실선</strong>은 유일한 파일 쓰기(저장 폴더 MP4)입니다. 원본 영상(초록)은 어느 단계에서도 수정되지 않습니다.
+            ③ 저장에서 <strong>회색 점선</strong>은 Go 블러가 App.auto를 <strong>읽기만</strong> 하는 관계입니다. 분석과 같은 fps로 원본 해상도를 디코딩하므로 n번째 프레임이 분석의 n번째와 같은 장면이고, 저장할 때 검출을 다시 하지 않습니다. <strong>주황 실선</strong>은 유일한 파일 쓰기(저장 폴더 MP4)입니다. 원본 영상(초록)은 어느 단계에서도 수정되지 않습니다.
             자동 가림을 쓰지 않으면 ③ 대신 기존 ffmpeg 필터 방식(5장 구조도)으로 저장합니다.
           </figcaption>
         </figure>
@@ -486,10 +486,12 @@
             <caption>유사 정답 = 모든 프레임을 1280px로 검출한 결과. 검출기 자체가 못 찾는 얼굴은 포함되지 않음. 측정 도구: devcli facecheck</caption>
             <thead><tr><th>항목</th><th>값</th><th>근거</th></tr></thead>
             <tbody>
-              <tr><td>검출</td><td>초당 30번, 긴 변 640px, 점수 0.4</td><td>초당 15번 대비 놓침 1.17% → 0.11% (NASA 720p60)</td></tr>
+              <tr><td>검출</td><td>초당 30번, 긴 변 640px, 점수 0.6</td><td>초당 15번 대비 놓침 1.17% → 0.11% (NASA 720p60). 점수는 오탐이 많아 09-29에 0.4 → 0.6 (NASA 놓침 0.48%/0.55%)</td></tr>
               <tr><td>추적</td><td>0.5초 보간, 앞뒤 0.3초 유지, 40% 확대</td><td>NASA 두 구간 놓침 0.02% / 0.04%</td></tr>
               <tr><td>오탐 거르기</td><td>평균 폭 8% 이상 트랙은 0.7 이상 검출 필요</td><td>신고 영상 건물 트랙 21개 제거, NASA 놓침 0.02% / 0.06% 유지 (모든 트랙 0.7이면 2.36%로 악화)</td></tr>
-              <tr><td>모자이크</td><td>한 변 최대 8칸, 칸 최소 16px</td><td>가까운 얼굴도 알아볼 수 없게</td></tr>
+              <tr><td>구간 변경</td><td>분석 결과를 영상 전체 기준으로 쌓아 두고 늘어난 부분만 자동 분석</td><td>구간을 다시 잘라도 가림·뺀 트랙 유지 (DB 없이 메모리)</td></tr>
+              <tr><td>짧은 트랙</td><td>검출 10회 미만이면 최고 점수 0.8 이상이어야 남김</td><td>한두 프레임 스친 오탐 깜빡임 제거(신고 6곳 중 5곳). 운전 영상 놓침 0.20%, 군중 3~6%</td></tr>
+              <tr><td>가림 방식</td><td>블러, 시그마 = max(4px, 긴 변 × 20%)</td><td>사용자 요청(보기 편함), 가까운 얼굴도 알아볼 수 없게</td></tr>
               <tr><td>속도 (개발 PC)</td><td>20초 720p60: 분석 약 6초·저장 약 6~7초 / 100초 1080p30: 각 약 31초 (WSL)</td><td>강사님 PC는 미측정</td></tr>
             </tbody>
           </table>
@@ -560,7 +562,7 @@
             <rect class="n" x="310" y="330" width="210" height="70" rx="10"/><text class="t" x="324" y="358">serveVideo</text><text class="s" x="324" y="380">/video/current, Range</text>
 
             <rect class="n" x="590" y="60" width="210" height="60" rx="10"/><text class="t" x="604" y="86">download</text><text class="s" x="604" y="106">주소 검사, 진행률, 403 재시도</text>
-            <rect class="n" x="590" y="150" width="210" height="60" rx="10"/><text class="t" x="604" y="176">media</text><text class="s" x="604" y="196">probe, 모자이크 필터, 저장</text>
+            <rect class="n" x="590" y="150" width="210" height="60" rx="10"/><text class="t" x="604" y="176">media</text><text class="s" x="604" y="196">probe, 블러 필터, 저장</text>
             <rect class="n" x="590" y="240" width="210" height="60" rx="10"/><text class="t" x="604" y="266">appdir</text><text class="s" x="604" y="286">경로, 파일 이름, 설정</text>
             <rect class="n" x="590" y="340" width="210" height="80" rx="10"/><text class="t" x="604" y="366">tools</text><text class="s" x="604" y="386">콘솔 창 숨김 + Job Object</text><text class="s" x="604" y="406">download·media가 이걸로 실행</text>
 
@@ -670,22 +672,22 @@
             <caption>경로는 저장소 루트 기준, 줄 번호는 feature/auto-mask ea1c3ac 기준.</caption>
             <thead><tr><th>영역</th><th>파일 · 줄</th><th>책임</th></tr></thead>
             <tbody>
-              <tr><td>진입점</td><td><a href="../main.go">main.go</a> :17</td><td>Wails 옵션(최대화 시작, 글자 칸 오른쪽 클릭 허용), AssetServer Handler 등록</td></tr>
-              <tr><td>바인딩</td><td><a href="../app.go">app.go</a> :145 Download, :187 OpenLocal, :223 load, :254 CloseVideo, :264 OutputFolder, :276 ChooseOutputFolder, :298 Export, :410 serveVideo</td><td>프론트 API, 작업 1개 보장, 진행률 이벤트, 미리보기 서빙</td></tr>
-              <tr><td>오류 문장</td><td><a href="../errors.go">errors.go</a> :16 문구, :54 downloadError, analyzeError, toolMissingError, fileNameError</td><td>원인별 "원인 + 할 일" 한 문장, 원인은 로그로</td></tr>
-              <tr><td>다운로드</td><td><a href="../internal/download/download.go">download.go</a> :53 Args, :76 Download(403 재시도), :174 parser.line, :235 Classify · <a href="../internal/download/url.go">url.go</a> :17</td><td>yt-dlp 인자, 영상·소리 진행률 합산, 실패 분류, 주소 정규화</td></tr>
-              <tr><td>미디어</td><td><a href="../internal/media/filter.go">filter.go</a> :33 ToPixels, :67 MosaicFilter, :104 ExportArgs · <a href="../internal/media/probe.go">probe.go</a> :59 · <a href="../internal/media/run.go">run.go</a> :32</td><td>좌표 변환, 필터 문자열, ffprobe 파싱, ffmpeg 실행·진행률·실패 시 파일 삭제</td></tr>
-              <tr><td>자동 가리기 바인딩</td><td><a href="../automask_app.go">automask_app.go</a> :57 Analyze, :99 faceDetector, :136 autoFrames(뺀 트랙 제외), :44 toAutoMask</td><td>분석 작업·진행률, 검출기 1회 로드, 저장 구간 일치 확인</td></tr>
-              <tr><td>추적·분석</td><td><a href="../internal/automask/track.go">track.go</a> :69 Track, :100 required(크기별 기준), :164 Rects · <a href="../internal/automask/analyze.go">analyze.go</a> :33 OptionsFor, :56 Analyze, :69 Collect, :116 PixelateFunc</td><td>보간·유지·확대, 오탐 거르기, 트랙 번호, 모자이크 칸 크기</td></tr>
-              <tr><td>검출</td><td><a href="../internal/detect/yunet.go">yunet.go</a> :38 NewFaceDetector, :78 Detect, :113 decodeYuNet · <a href="../internal/detect/runtime.go">runtime.go</a> :21 Init(SetDllDirectory) · <a href="../internal/detect/frame.go">frame.go</a> :17 Letterbox</td><td>ONNX Runtime 세션, OpenCV와 같은 디코딩, 런타임 로드 실패 안내</td></tr>
-              <tr><td>프레임</td><td><a href="../internal/frame/frame.go">frame/frame.go</a> :36 Pixelate · <a href="../internal/media/pipe.go">media/pipe.go</a> :85 ProcessFrames, :139 DecodeFrames</td><td>bgr24 프레임, 칸 평균 모자이크, 디코딩→처리→인코딩 파이프</td></tr>
-              <tr><td>프로세스</td><td><a href="../internal/tools/tools.go">tools.go</a> :69 Command · <a href="../internal/tools/proc_windows.go">proc_windows.go</a> :15 숨김, :27 Job Object, :69 Reveal · <a href="../internal/tools/archive.go">archive.go</a> :10 RunningFromArchive · <a href="../internal/tools/models.go">models.go</a> :15 ORTLib, :23 ModelPath</td><td>bin\ 경로, 콘솔 창 숨김, 트리 종료, stderr 로그, zip 안 실행 감지, 런타임·모델 경로</td></tr>
-              <tr><td>작업 관리</td><td><a href="../internal/job/job.go">job.go</a> :23 Begin, :55 CancelAndWait</td><td>동시 작업 1개, 취소, 종료 대기, ETA·전송 간격</td></tr>
-              <tr><td>경로·설정</td><td><a href="../internal/appdir/filename.go">filename.go</a> :32 CleanFileName, :67 OutputPath · <a href="../internal/appdir/settings.go">settings.go</a> :40 · <a href="../internal/appdir/desktop_windows.go">desktop_windows.go</a> :11</td><td>파일 이름 검사, 덮어쓰기 방지, 저장 폴더 기억, OneDrive 바탕화면</td></tr>
+              <tr><td>진입점</td><td><a href="../main.go">main.go</a> :18</td><td>Wails 옵션(최대화 시작, 글자 칸 오른쪽 클릭 허용), AssetServer Handler 등록</td></tr>
+              <tr><td>바인딩</td><td><a href="../app.go">app.go</a> :141 Download, :183 OpenLocal, :219 load, :250 CloseVideo, :259 OutputFolder, :270 ChooseOutputFolder, :292 Export · <a href="../video_serve.go">video_serve.go</a> :21 serveVideo(4MB 조각 응답)</td><td>프론트 API, 작업 1개 보장, 진행률 이벤트, 미리보기 서빙</td></tr>
+              <tr><td>오류 문장</td><td><a href="../errors.go">errors.go</a> :18 문구, :55 downloadError, analyzeError, toolMissingError, fileNameError</td><td>원인별 "원인 + 할 일" 한 문장, 원인은 로그로</td></tr>
+              <tr><td>다운로드</td><td><a href="../internal/download/download.go">download.go</a> :53 Args, :76 Download(403 재시도), :169 parser.line, :230 Classify · <a href="../internal/download/url.go">url.go</a> :16</td><td>yt-dlp 인자, 영상·소리 진행률 합산, 실패 분류, 주소 정규화</td></tr>
+              <tr><td>미디어</td><td><a href="../internal/media/filter.go">filter.go</a> :41 ToPixels, :74 BlurFilter, :109 ExportArgs · <a href="../internal/media/probe.go">probe.go</a> :64 · <a href="../internal/media/run.go">run.go</a> :29</td><td>좌표 변환, 필터 문자열, ffprobe 파싱, ffmpeg 실행·진행률·실패 시 파일 삭제</td></tr>
+              <tr><td>자동 가리기 바인딩</td><td><a href="../automask_app.go">automask_app.go</a> :54 Analyze, :97 faceDetector, :134 autoFrames(뺀 트랙 제외), :41 toAutoMask</td><td>분석 작업·진행률, 검출기 1회 로드, 저장 구간 일치 확인</td></tr>
+              <tr><td>추적·분석</td><td><a href="../internal/automask/track.go">track.go</a> :68 Track, :99 required(크기별 기준), :163 Rects · <a href="../internal/automask/analyze.go">analyze.go</a> :33 OptionsFor, :55 Analyze, :68 Collect, :115 BlurFunc</td><td>보간·유지·확대, 오탐 거르기, 트랙 번호, 블러 적용</td></tr>
+              <tr><td>검출</td><td><a href="../internal/detect/yunet.go">yunet.go</a> :39 NewFaceDetector, :102 Detect, :136 decodeYuNet · <a href="../internal/detect/runtime.go">runtime.go</a> :22 Init(SetDllDirectory) · <a href="../internal/detect/frame.go">frame.go</a> :18 Letterbox</td><td>ONNX Runtime 세션, OpenCV와 같은 디코딩, 런타임 로드 실패 안내</td></tr>
+              <tr><td>프레임</td><td><a href="../internal/frame/frame.go">frame/frame.go</a> :37 Blur · <a href="../internal/media/pipe.go">media/pipe.go</a> :84 ProcessFrames, :138 DecodeFrames</td><td>bgr24 프레임, 줄여 흐린 뒤 키우는 블러, 디코딩→처리→인코딩 파이프</td></tr>
+              <tr><td>프로세스</td><td><a href="../internal/tools/tools.go">tools.go</a> :68 Command · <a href="../internal/tools/proc_windows.go">proc_windows.go</a> :15 숨김, :27 Job Object, :69 Reveal · <a href="../internal/tools/archive.go">archive.go</a> :10 RunningFromArchive · <a href="../internal/tools/models.go">models.go</a> :15 ORTLib, :22 ModelPath</td><td>bin\ 경로, 콘솔 창 숨김, 트리 종료, stderr 로그, zip 안 실행 감지, 런타임·모델 경로</td></tr>
+              <tr><td>작업 관리</td><td><a href="../internal/job/job.go">job.go</a> :21 Begin, :52 CancelAndWait</td><td>동시 작업 1개, 취소, 종료 대기, ETA·전송 간격</td></tr>
+              <tr><td>경로·설정</td><td><a href="../internal/appdir/filename.go">filename.go</a> :30 CleanFileName, :65 OutputPath · <a href="../internal/appdir/settings.go">settings.go</a> :38 · <a href="../internal/appdir/desktop_windows.go">desktop_windows.go</a> :11</td><td>파일 이름 검사, 덮어쓰기 방지, 저장 폴더 기억, OneDrive 바탕화면</td></tr>
               <tr><td>프론트 골격</td><td><a href="../frontend/src/wizard.js">wizard.js</a> :4 · <a href="../frontend/src/state.js">state.js</a> :19 setVideo, :45 setRange, :57 autoRectsAt, :72 toggleExcluded, :86 checkRange · <a href="../frontend/src/api.js">api.js</a></td><td>마법사·이전/다음, 공유 상태, Go 호출 창구</td></tr>
               <tr><td>프론트 단계</td><td><a href="../frontend/src/steps/load.js">load.js</a> · <a href="../frontend/src/steps/trim.js">trim.js</a> · <a href="../frontend/src/steps/mask.js">mask.js</a> · <a href="../frontend/src/steps/save.js">save.js</a></td><td>단계별 화면과 검증</td></tr>
               <tr><td>프론트 영상</td><td><a href="../frontend/src/media/videoSource.js">videoSource.js</a> :7 openVideo, :19 closeVideo · <a href="../frontend/src/ui/player.js">player.js</a> :5 · <a href="../frontend/src/mask/overlay.js">overlay.js</a> :20 · <a href="../frontend/src/mask/autoPanel.js">autoPanel.js</a> · <a href="../frontend/src/mask/soundPanel.js">soundPanel.js</a></td><td>공유 video, 한글 버튼 플레이어, 가림 캔버스(직접·자동, 클릭 빼기), 자동 가리기·소리 패널</td></tr>
-              <tr><td>개발 도구</td><td><a href="../cmd/devcli/main.go">cmd/devcli</a>(<a href="../cmd/devcli/facecheck.go">facecheck</a>) · <a href="../cmd/cmtcheck/main.go">cmd/cmtcheck</a> · <a href="../scripts/qa/run.sh">scripts/qa/run.sh</a> · <a href="../scripts/fetch-tools.sh">fetch-tools.sh</a> · <a href="../scripts/package.sh">package.sh</a></td><td>UI 없는 검증·얼굴 설정 비교, 주석 규칙, 전체 검사, 도구 받기(windows·linux·ml·vcrt), 배포</td></tr>
+              <tr><td>개발 도구</td><td><a href="../cmd/devcli/main.go">cmd/devcli</a>(<a href="../cmd/devcli/facecheck.go">facecheck</a>) · <a href="../cmd/cmtcheck/main.go">cmd/cmtcheck</a> · <a href="../cmd/apispec/main.go">cmd/apispec</a>(<a href="api.json">docs/api.json</a>) · <a href="../scripts/qa/run.sh">scripts/qa/run.sh</a> · <a href="../scripts/fetch-tools.sh">fetch-tools.sh</a> · <a href="../scripts/package.sh">package.sh</a></td><td>UI 없는 검증·얼굴 설정 비교, 주석 규칙, API 명세 생성·검사, 전체 검사(프론트 tsc 포함), 도구 받기(windows·linux·ml·vcrt), 배포</td></tr>
             </tbody>
           </table>
         </div>
@@ -795,8 +797,8 @@
             <tbody>
               <tr><td><code>운전영상편집기\운전영상편집기.exe</code></td><td>11MB</td><td>앱 본체, 화면(HTML/JS/CSS) 내장</td><td>-</td></tr>
               <tr><td><code>bin\yt-dlp.exe</code> + <code>bin\deno.exe</code></td><td>17MB + 93MB</td><td>유튜브 다운로드, YouTube 추출용 JS 런타임</td><td>"프로그램 파일 일부가 없습니다" 안내 (zip 안에서 바로 실행했으면 "압축을 풀지 않고 실행하셨습니다" 안내)</td></tr>
-              <tr><td><code>bin\ffmpeg.exe</code> + <code>bin\ffprobe.exe</code></td><td>157MB + 157MB</td><td>자르기·모자이크·저장, 영상 정보 조회 (정적 빌드, DLL 불필요)</td><td>같은 안내</td></tr>
-              <tr><td><code>bin\onnxruntime.dll</code> + VC++ DLL 4개 + <code>bin\models\face_yunet_2023mar.onnx</code></td><td>16MB + 0.7MB + 0.2MB</td><td>얼굴 자동 가리기 (브랜치). DLL은 SetDllDirectory로 bin\에서 로드</td><td>얼굴 찾기 누를 때 파일 없음 안내, 런타임 로드 실패 시 VC++ 안내</td></tr>
+              <tr><td><code>bin\ffmpeg.exe</code> + <code>bin\ffprobe.exe</code></td><td>157MB + 157MB</td><td>자르기·블러·저장, 영상 정보 조회 (정적 빌드, DLL 불필요)</td><td>같은 안내</td></tr>
+              <tr><td><code>bin\onnxruntime.dll</code> + VC++ DLL 4개 + <code>bin\models\face_yunet_2026may.onnx</code></td><td>16MB + 0.7MB + 0.2MB</td><td>얼굴 자동 가리기 (브랜치). DLL은 SetDllDirectory로 bin\에서 로드</td><td>얼굴 찾기 누를 때 파일 없음 안내, 런타임 로드 실패 시 VC++ 안내</td></tr>
               <tr><td>(zip에 없음) WebView2 런타임</td><td>-</td><td>화면 표시. Windows 11 기본 포함, Windows 10도 대부분 설치됨</td><td>Wails 기본 설치 안내</td></tr>
               <tr><td>(실행 중 생성) <code>%LOCALAPPDATA%\운전영상편집기\</code></td><td>작업량에 따라</td><td>work(7일 뒤 삭제), logs, settings.json</td><td>-</td></tr>
             </tbody>
@@ -828,7 +830,7 @@
           <h3 data-command-field="purpose">② Windows 실사용 테스트 전: 배포 폴더와 zip 만들기</h3>
           <dl>
             <dt>정확한 결과물</dt><dd data-command-field="artifact">
-              Windows 10/11 x64 GUI 실행 파일 <code>운전영상편집기.exe</code>(Go 1.25.5, Wails v2.16.0, <strong>cgo + mingw-w64</strong>, <code>-trimpath -ldflags "-s -w"</code>, 프론트 Vite 빌드 내장) + <code>bin\</code>(yt-dlp, ffmpeg, ffprobe, deno, onnxruntime.dll 1.29.0, VC++ 런타임 DLL 4개) + <code>bin\models\face_yunet_2023mar.onnx</code>.
+              Windows 10/11 x64 GUI 실행 파일 <code>운전영상편집기.exe</code>(Go 1.25.5, Wails v2.16.0, <strong>cgo + mingw-w64</strong>, <code>-trimpath -ldflags "-s -w"</code>, 프론트 Vite 빌드 내장) + <code>bin\</code>(yt-dlp, ffmpeg, ffprobe, deno, onnxruntime.dll 1.29.0, VC++ 런타임 DLL 4개) + <code>bin\models\face_yunet_2026may.onnx</code>.
               실행하려면 대상 PC에 WebView2 런타임이 있어야 합니다. 설치 파일이나 코드 서명은 없습니다.
               <strong>결과물을 만들기만 하고 실행·설치·배포하지 않습니다.</strong> 도구 버전은 <code>tools/windows/</code>에 이미 받아 둔 파일을 그대로 씁니다(2026-09-28 기준 yt-dlp 2026.08.19). 파일이 없으면 최신 릴리스를 새로 받습니다.
             </dd>

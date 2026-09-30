@@ -1,3 +1,4 @@
+// 미리보기는 VideoInfo.URL(/video/current?v=버전)로 받는다. 다른 경로는 404다.
 // Wails는 Windows에서 응답 본문을 전부 메모리에 모은 뒤 UI 스레드에서 복사한다.
 // 그래서 <video>의 "bytes=0-" 요청에 파일 끝까지 주면 긴 영상에서 화면이 멈춘다.
 // 응답은 한 번에 maxRangeChunk까지만 206으로 주고, 나머지는 브라우저가 이어 요청한다.

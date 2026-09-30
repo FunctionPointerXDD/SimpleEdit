@@ -7,13 +7,23 @@ import (
 	"simpleEdit/internal/frame"
 )
 
+func TestInputSizeAligns(t *testing.T) {
+	tests := []struct{ w, h, pw, ph int }{{640, 360, 640, 384}, {1920, 1080, 640, 384}, {360, 640, 384, 640}, {640, 640, 640, 640}, {2, 1, 32, 32}}
+	for _, tt := range tests {
+		if _, _, _, pw, ph := InputSize(tt.w, tt.h, 640); pw != tt.pw || ph != tt.ph {
+			t.Errorf("%dx%d → %dx%d, want %dx%d", tt.w, tt.h, pw, ph, tt.pw, tt.ph)
+		}
+	}
+}
+
 func TestLetterboxCopyAndPad(t *testing.T) {
 	f := frame.Frame{W: 2, H: 1, Pix: []byte{1, 2, 3, 4, 5, 6}}
-	dst := make([]float32, 3*4*4)
-	if s := Letterbox(f, 4, 114, dst); s != 1 {
-		t.Fatalf("scale = %v", s)
+	dst := make([]float32, 3*32*32)
+	s, pw, ph := Letterbox(f, 640, 114, dst)
+	if s != 1 || pw != 32 || ph != 32 {
+		t.Fatalf("scale = %v, 캔버스 %dx%d", s, pw, ph)
 	}
-	plane := 16
+	plane := 32 * 32
 	want := map[int]float32{0: 1, 1: 4, plane: 2, plane + 1: 5, 2 * plane: 3, 2*plane + 1: 6}
 	for i, v := range dst {
 		w, ok := want[i]
@@ -27,21 +37,18 @@ func TestLetterboxCopyAndPad(t *testing.T) {
 }
 
 func TestLetterboxDownscale(t *testing.T) {
-	f := frame.Frame{W: 8, H: 4, Pix: make([]byte, 8*4*3)}
+	f := frame.Frame{W: 128, H: 64, Pix: make([]byte, 128*64*3)}
 	for i := range f.Pix {
 		f.Pix[i] = 200
 	}
-	dst := make([]float32, 3*4*4)
-	s := Letterbox(f, 4, 0, dst)
-	if s != 0.5 {
-		t.Fatalf("scale = %v", s)
+	dst := make([]float32, 3*64*32)
+	s, pw, ph := Letterbox(f, 64, 0, dst)
+	if s != 0.5 || pw != 64 || ph != 32 {
+		t.Fatalf("scale = %v, 캔버스 %dx%d", s, pw, ph)
 	}
-	for y := 0; y < 4; y++ {
-		for x := 0; x < 4; x++ {
-			v := dst[y*4+x]
-			if y < 2 && v != 200 || y >= 2 && v != 0 {
-				t.Fatalf("(%d,%d) = %v", x, y, v)
-			}
+	for i, v := range dst {
+		if v != 200 {
+			t.Fatalf("dst[%d] = %v", i, v)
 		}
 	}
 }
@@ -63,17 +70,18 @@ func TestNMS(t *testing.T) {
 
 func TestDecodeYuNet(t *testing.T) {
 	var o yunetOutputs
+	const pw, ph = 640, 384
 	for i, s := range yunetStrides {
-		n := (yunetSize / s) * (yunetSize / s)
+		n := (pw / s) * (ph / s)
 		o.cls[i] = make([]float32, n)
 		o.obj[i] = make([]float32, n)
 		o.bbox[i] = make([]float32, n*4)
 	}
-	cols := yunetSize / 16
+	cols := pw / 16
 	idx := 3*cols + 5
 	o.cls[1][idx], o.obj[1][idx] = 0.81, 1.2
 	copy(o.bbox[1][idx*4:], []float32{0.5, 0.25, float32(math.Log(2)), 0})
-	got := decodeYuNet(o, 0.5)
+	got := decodeYuNet(o, pw, 0.5)
 	if len(got) != 1 {
 		t.Fatalf("박스 %d개", len(got))
 	}

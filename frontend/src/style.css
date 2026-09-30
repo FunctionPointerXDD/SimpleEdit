@@ -129,6 +129,7 @@ b { color: var(--primary-dark); }
 .btn:hover:not(:disabled) { border-color: var(--primary); }
 .btn:focus-visible { outline: 4px solid #93c5fd; outline-offset: 2px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:active:not(:disabled) { transform: translateY(2px); filter: brightness(0.92); }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
 .btn.primary:hover:not(:disabled) { background: var(--primary-dark); border-color: var(--primary-dark); }
 .btn.secondary { background: #fff; color: var(--primary-dark); border-color: var(--primary); }
@@ -155,7 +156,6 @@ b { color: var(--primary-dark); }
 }
 
 /* ── 1단계: 주소 입력 ──────────────────────────── */
-.action-row { display: flex; justify-content: center; margin: 8px 0 16px; }
 .url-row { display: flex; gap: 12px; margin-top: 8px; }
 .url-input {
     flex: 1;
@@ -177,7 +177,29 @@ b { color: var(--primary-dark); }
 }
 .loaded-title, .done-title { font-size: 26px; font-weight: bold; color: var(--success); }
 .loaded-hint { margin-top: 6px; font-weight: bold; }
-.done-actions { display: flex; gap: 16px; margin-top: 12px; }
+.done-card { margin-top: 12px; padding: 12px 20px; }
+.done-card p { margin: 4px 0 0; }
+.done-changed { font-weight: bold; color: var(--end); }
+.done-hint { color: var(--muted); }
+.save-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 12px 0 0; }
+.save-actions-main { display: flex; gap: 16px; }
+
+/* ── 확인 창 ──────────────────────────────────── */
+.modal-backdrop {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(17, 24, 39, 0.55);
+}
+.modal {
+    width: min(640px, calc(100vw - 48px));
+    padding: 28px 32px;
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+.modal-title { margin: 0 0 12px; font-size: 28px; }
+.modal-line { margin: 6px 0; font-size: 22px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 16px; margin-top: 24px; }
 
 /* ── 안내 문장 ─────────────────────────────────── */
 .message {

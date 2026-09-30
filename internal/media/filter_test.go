@@ -40,24 +40,33 @@ func TestToPixels(t *testing.T) {
 	}
 }
 
-func TestMosaicFilter(t *testing.T) {
-	if got := MosaicFilter(nil); got != "" {
+func TestBlurSigma(t *testing.T) {
+	tests := []struct{ w, h, want int }{{10, 8, 4}, {40, 20, 8}, {100, 200, 40}, {320, 160, 64}}
+	for _, tt := range tests {
+		if got := BlurSigma(tt.w, tt.h); got != tt.want {
+			t.Errorf("BlurSigma(%d,%d) = %d, want %d", tt.w, tt.h, got, tt.want)
+		}
+	}
+}
+
+func TestBlurFilter(t *testing.T) {
+	if got := BlurFilter(nil); got != "" {
 		t.Errorf("빈 목록 = %q", got)
 	}
 
-	one := MosaicFilter([]PixelRect{{X: 100, Y: 50, W: 320, H: 160}})
+	one := BlurFilter([]PixelRect{{X: 100, Y: 50, W: 320, H: 160}})
 	wantOne := "[0:v]split=2[base][m0]" +
-		";[m0]crop=320:160:100:50,scale=20:10,scale=320:160:flags=neighbor[p0]" +
+		";[m0]crop=320:160:100:50,scale=26:14:flags=area,format=gbrp,boxblur=5:3,format=yuv420p,scale=320:160:flags=bilinear[p0]" +
 		";[base][p0]overlay=100:50[v]"
 	if one != wantOne {
 		t.Errorf("1개:\n got %s\nwant %s", one, wantOne)
 	}
 
-	three := MosaicFilter([]PixelRect{{0, 0, 32, 32}, {100, 100, 8, 8}, {200, 0, 64, 16}})
+	three := BlurFilter([]PixelRect{{0, 0, 32, 32}, {100, 100, 8, 8}, {200, 0, 64, 16}})
 	wantThree := "[0:v]split=4[base][m0][m1][m2]" +
-		";[m0]crop=32:32:0:0,scale=2:2,scale=32:32:flags=neighbor[p0]" +
-		";[m1]crop=8:8:100:100,scale=1:1,scale=8:8:flags=neighbor[p1]" +
-		";[m2]crop=64:16:200:0,scale=4:1,scale=64:16:flags=neighbor[p2]" +
+		";[m0]crop=32:32:0:0,scale=32:32:flags=area,format=gbrp,boxblur=6:3,format=yuv420p,scale=32:32:flags=bilinear[p0]" +
+		";[m1]crop=8:8:100:100,scale=8:8:flags=area,format=gbrp,boxblur=3:3,format=yuv420p,scale=8:8:flags=bilinear[p1]" +
+		";[m2]crop=64:16:200:0,scale=64:16:flags=area,format=gbrp,boxblur=7:3,format=yuv420p,scale=64:16:flags=bilinear[p2]" +
 		";[base][p0]overlay=0:0[o0];[o0][p1]overlay=100:100[o1];[o1][p2]overlay=200:0[v]"
 	if three != wantThree {
 		t.Errorf("3개:\n got %s\nwant %s", three, wantThree)
@@ -82,7 +91,7 @@ func TestExportArgs(t *testing.T) {
 		Rects: []PixelRect{{0, 0, 32, 32}}})
 	i := slices.Index(masked, "-filter_complex")
 	if i < 0 || masked[i+2] != "-map" || masked[i+3] != "[v]" {
-		t.Errorf("모자이크 인자 이상: %v", masked)
+		t.Errorf("블러 인자 이상: %v", masked)
 	}
 }
 

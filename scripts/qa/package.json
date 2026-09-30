@@ -5,6 +5,7 @@
   "description": "앱과 분리된 개발용 검사 도구 (주석 규칙, 모의 UI 테스트)",
   "devDependencies": {
     "acorn": "^8.14.0",
-    "playwright-core": "^1.55.0"
+    "playwright-core": "^1.55.0",
+    "typescript": "^5.9.3"
   }
 }

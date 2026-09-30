@@ -71,16 +71,22 @@ function installMock({video, meta}) {
         CloseVideo: async () => { window.__mock.closed++; },
         Analyze: async (req) => {
             window.__mock.analyzeReq = req;
+            window.__mock.analyzeCount = (window.__mock.analyzeCount || 0) + 1;
             await fakeProgress('analyze:progress', ['analyze'], 40);
             const fps = 30;
-            const n = Math.round((req.end - req.start) * fps);
-            const frames = Array.from({length: n}, (_, i) => [[0.35 + 0.1 * i / n, 0.2, 0.2, 0.3, 1]]);
-            return {kind: req.kind, start: req.start, duration: req.end - req.start, fps, frames, found: n, tracks: 1};
+            const prev = !req.fresh && window.__mock.cover;
+            const start = prev ? Math.min(prev.start, req.start) : req.start;
+            const end = prev ? Math.max(prev.end, req.end) : req.end;
+            window.__mock.cover = {start, end};
+            const n = Math.round((end - start) * fps);
+            const frames = Array.from({length: n}, (_, i) => [[0.35 + 0.1 * (start + i / fps) / 20, 0.2, 0.2, 0.3, 1]]);
+            return {kind: req.kind, start, duration: end - start, fps, frames, found: n, tracks: 1};
         },
         Export: async (req) => {
             window.__mock.exportReq = req;
+            window.__mock.exportCount = (window.__mock.exportCount || 0) + 1;
             await fakeProgress('export:progress', ['export'], 80);
-            return 'C:\\Users\\강사\\Desktop\\운전강의_20260928_1405.mp4';
+            return `${window.__mock.folder}\\${req.fileName}.mp4`;
         },
         Cancel: async () => {},
         OutputFolder: async () => window.__mock.folder,
@@ -283,6 +289,17 @@ await page.fill('.name-input', '교차로 사고 영상');
 await click('저장 위치 바꾸기');
 await page.waitForFunction(() => document.querySelector('.folder-path')?.textContent.includes('강의영상'));
 check('저장 위치 바꾸기 표시', true);
+const visibleButtons = () => page.$$eval('.save-actions button:not([hidden])', (bs) => bs.map((b) => b.textContent).join('|'));
+check('저장 전 버튼', (await visibleButtons()) === '저장하기|새 영상 편집하기', await visibleButtons());
+await click('새 영상 편집하기');
+await page.waitForSelector('.modal');
+check('저장 전 새 영상: 확인 창 안내', (await page.textContent('.modal')).includes('아직 이 영상을 저장하지 않았습니다'));
+check('확인 창 처음 초점은 계속 편집하기', await page.evaluate(() => document.activeElement?.textContent === '계속 편집하기'));
+await shot('4-confirm-unsaved');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(100);
+check('Esc로 취소하면 4단계 그대로', (await page.$('.modal')) === null && (await page.textContent('.step-label')).includes('4 / 4'));
+check('취소해도 영상 안 닫음', await page.evaluate(() => window.__mock.closed === 0));
 await click('저장하기');
 await page.waitForTimeout(250);
 check('저장 중 이전 잠금', await page.getByRole('button', {name: '◀ 이전'}).isDisabled());
@@ -298,7 +315,11 @@ check('저장 요청 구간', req.start === 3 && req.end === 13.5);
 check('사각형 1 비율', near(req.rects[0].x, 0.1) && near(req.rects[0].y, 0.2) && near(req.rects[0].w, 0.3) && near(req.rects[0].h, 0.3), JSON.stringify(req.rects[0]));
 check('사각형 2 비율(역방향 드래그)', near(req.rects[1].x, 0.6) && near(req.rects[1].y, 0.7) && near(req.rects[1].w, 0.3) && near(req.rects[1].h, 0.2), JSON.stringify(req.rects[1]));
 check('사각형 개수', req.rects.length === 2);
-check('완료 안내에 폴더', (await page.textContent('.done-card')).includes('Desktop'));
+check('완료 안내에 폴더·이름', (await page.textContent('.done-card')).includes('D:\\강의영상') &&
+    (await page.textContent('.done-card')).includes('교차로 사고 영상.mp4'));
+check('처음 저장은 덮어쓰기 아님', req.overwrite === false, String(req.overwrite));
+check('저장 후 버튼 순서', (await visibleButtons()) === '저장 폴더 열기|다시 저장하기|새 영상 편집하기', await visibleButtons());
+check('저장 직후 안내: 바뀐 내용 없음', (await page.textContent('.done-card')).includes('바뀐 내용이 없습니다'));
 
 // 저장 후 이전 → 영상·가림·무음 유지
 await click('◀ 이전');
@@ -309,7 +330,8 @@ check('저장 후 이전: 무음 유지', await page.evaluate(() => document.que
 check('영상 파일 재요청 없음', videoRequests === 0, `요청 ${videoRequests}회`);
 check('CloseVideo 아직 안 부름', await page.evaluate(() => window.__mock.closed === 0));
 
-// 구간을 바꾸면 자동 결과 버림
+// 구간을 줄이면 다시 분석하지 않고, 늘리면 늘어난 부분만 이어서 분석하며 뺀 트랙은 그대로
+const countBefore = await page.evaluate(() => window.__mock.analyzeCount);
 await click('◀ 이전');
 await videoReady();
 await seekTo(4);
@@ -317,21 +339,92 @@ await page.waitForTimeout(200);
 await click('여기서 시작');
 await click('다음 ▶');
 await page.waitForTimeout(300);
-check('구간 바꾸면 자동 결과 버림', (await page.$('.auto-toggle[hidden]')) !== null);
+check('구간 줄이면 자동 결과 유지', (await page.$('.auto-toggle:not([hidden])')) !== null);
+check('구간 줄이면 다시 분석 안 함', (await page.evaluate(() => window.__mock.analyzeCount)) === countBefore);
+await click('◀ 이전');
+await videoReady();
+await seekTo(2);
+await page.waitForTimeout(200);
+await click('여기서 시작');
 await click('다음 ▶');
+await page.waitForSelector('.auto-panel .progress:not([hidden])');
+check('구간 늘리면 자동으로 이어서 분석', await nextBtn().isDisabled());
+await page.waitForSelector('.auto-panel .progress', {state: 'hidden'});
+await page.waitForTimeout(200);
+const resumeReq = await page.evaluate(() => window.__mock.analyzeReq);
+check('이어서 분석은 fresh 아님', resumeReq.fresh === false && resumeReq.start === 2, JSON.stringify(resumeReq));
+check('이어서 분석 안내', (await page.textContent('.guide-line')).includes('빼 둔 곳은 그대로'));
+check('늘어난 부분만 한 번 분석', (await page.evaluate(() => window.__mock.analyzeCount)) === countBefore + 1);
+// 꺼 둔 채로 구간을 늘리면 분석하지 않고, 다시 켤 때 이어서 분석
+await click('얼굴 가리기 끄기');
+await click('◀ 이전');
+await videoReady();
+await seekTo(1);
+await page.waitForTimeout(200);
+await click('여기서 시작');
+await click('다음 ▶');
+await page.waitForTimeout(300);
+check('꺼 둔 종류는 이어서 분석 안 함', (await page.evaluate(() => window.__mock.analyzeCount)) === countBefore + 1);
+await click('얼굴 가리기 켜기');
+await page.waitForSelector('.auto-panel .progress', {state: 'hidden'});
+await page.waitForTimeout(200);
+check('다시 켜면 이어서 분석', (await page.evaluate(() => window.__mock.analyzeCount)) === countBefore + 2);
+await click('다음 ▶');
+await page.waitForTimeout(200);
+check('저장 단계로 넘어감', (await page.$('.name-input')) !== null);
 await page.waitForFunction(() => document.querySelector('.name-input')?.value !== '');
 check('이전 후 돌아와도 파일 이름 유지', (await page.inputValue('.name-input')) === '교차로 사고 영상');
-await page.focus('.name-input');
-await page.keyboard.press('Enter');
+check('돌아와도 완료 카드 유지', await page.isVisible('.done-card'));
+check('돌아와도 다시 저장하기 버튼', (await visibleButtons()) === '저장 폴더 열기|다시 저장하기|새 영상 편집하기', await visibleButtons());
+check('바뀐 내용 안내', (await page.textContent('.done-card')).includes('저장한 뒤 바뀐 내용이 있습니다'));
+check('버튼 줄이 화면 안(이전 막대 위)', await page.evaluate(() =>
+    document.querySelector('.save-actions').getBoundingClientRect().bottom <= document.querySelector('.navbar').getBoundingClientRect().top));
+await shot('4-changed');
+const exportCount = () => page.evaluate(() => window.__mock.exportCount);
+const before = await exportCount();
+await click('다시 저장하기');
+await page.waitForSelector('.modal');
+check('바뀐 뒤 다시 저장: 덮어쓰기 확인 창', (await page.textContent('.modal-title')) === '같은 파일로 덮어쓰시겠습니까?');
+await shot('4-overwrite');
+await page.locator('.modal').getByRole('button', {name: '취소', exact: true}).click();
+await page.waitForTimeout(150);
+check('취소하면 저장 안 함', (await exportCount()) === before && (await page.$('.modal')) === null);
+await click('다시 저장하기');
+await page.locator('.modal').getByRole('button', {name: '확인', exact: true}).click();
+await page.waitForFunction((n) => window.__mock.exportCount === n + 1, before);
 await page.waitForSelector('.done-card:not([hidden])');
+check('확인하면 덮어쓰기로 저장', (await page.evaluate(() => window.__mock.exportReq.overwrite)) === true);
+check('다시 저장 후 바뀐 내용 없음', (await page.textContent('.done-card')).includes('바뀐 내용이 없습니다'));
+await click('다시 저장하기');
+await page.waitForTimeout(300);
+check('바뀐 것 없으면 아무 일도 안 함', (await page.$('.modal')) === null && (await exportCount()) === before + 1 &&
+    !(await page.isVisible('.auto-panel .progress, .progress:not([hidden])')));
+await page.fill('.name-input', '교차로 사고 영상 수정본');
+check('이름 바꾸면 새 파일 안내', (await page.textContent('.done-card')).includes('새 파일로 저장합니다'));
+await click('다시 저장하기');
+await page.waitForFunction((n) => window.__mock.exportCount === n + 2, before);
+await page.waitForSelector('.done-card:not([hidden])');
+check('이름 바꾸면 묻지 않고 새 파일로', (await page.evaluate(() => window.__mock.exportReq.overwrite)) === false &&
+    (await page.textContent('.done-card')).includes('수정본.mp4'));
+const req2 = await page.evaluate(() => window.__mock.exportReq);
+check('구간 바꾼 뒤에도 뺀 트랙 유지', JSON.stringify(req2.exclude) === '{"face":[1]}' && req2.start === 1, JSON.stringify(req2));
 await page.evaluate(() => { window.__mock.exportReq = null; });
 await page.focus('.name-input');
 await page.keyboard.press('Enter');
 await page.waitForTimeout(300);
 check('완료 뒤 Enter로 중복 저장 안 함', await page.evaluate(() => window.__mock.exportReq === null));
 
-// 새 영상 편집하기
+// 새 영상 편집하기: 확인 창에서 계속 편집하기 → 그대로, 새 영상 편집하기 → 처음으로
 await click('새 영상 편집하기');
+await page.waitForSelector('.modal');
+check('저장 후 새 영상: 파일은 남는다는 안내', (await page.textContent('.modal')).includes('저장한 영상 파일은 그대로'));
+await shot('4-confirm-saved');
+await page.locator('.modal').getByRole('button', {name: '계속 편집하기', exact: true}).click();
+await page.waitForTimeout(100);
+check('계속 편집하기는 4단계 그대로', (await page.$('.modal')) === null && (await page.textContent('.step-label')).includes('4 / 4'));
+await click('새 영상 편집하기');
+await page.locator('.modal').getByRole('button', {name: '새 영상 편집하기', exact: true}).click();
+await page.waitForTimeout(200);
 check('처음으로 돌아감', (await page.textContent('.step-label')).includes('1 / 4'));
 check('새 영상 편집하기 → CloseVideo', await page.evaluate(() => window.__mock.closed === 1));
 check('불러온 영상 표시 없음', await page.$eval('.loaded-card', (e) => e.hidden));

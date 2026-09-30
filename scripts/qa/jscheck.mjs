@@ -2,6 +2,7 @@
 // - 파일 맨 위(첫 문장 앞)의 주석은 줄마다 80자 이내
 // - 최상위 함수 바로 위 주석은 한 묶음 80자 이내, 동작 방식만 적는다
 // - 그 밖의 주석(함수 안, 상수·객체 위)은 위반
+// - JSDoc 타입 주석(/** @param … */ 등 @태그가 있는 블록)은 코드로 보고 검사하지 않는다
 // LIST=1이면 위반 대신 모든 주석 묶음과 종류를 출력한다.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,15 +50,20 @@ function functionLines(ast) {
     return out;
 }
 
+const isJSDocType = (c) => c.type === 'Block' && c.value.startsWith('*') && /@\w+/.test(c.value);
+
 function checkFile(file) {
     const comments = [];
     const ast = acorn.parse(fs.readFileSync(file, 'utf8'),
         {ecmaVersion: 'latest', sourceType: 'module', onComment: comments, locations: true});
     const fnLines = functionLines(ast);
+    const jsdocEnd = new Map(comments.filter(isJSDocType).map((c) => [c.loc.start.line, c.loc.end.line]));
     const firstStart = ast.body[0]?.start ?? Infinity;
     let bad = 0;
-    for (const g of groupComments(comments)) {
-        const kind = g.start < firstStart ? 'HEAD' : fnLines.has(g.endLine + 1) ? 'FUNC' : 'OTHER';
+    for (const g of groupComments(comments.filter((c) => !isJSDocType(c)))) {
+        let next = g.endLine + 1;
+        while (jsdocEnd.has(next)) next = jsdocEnd.get(next) + 1;
+        const kind = g.start < firstStart ? 'HEAD' : fnLines.has(next) ? 'FUNC' : 'OTHER';
         if (listMode) {
             console.log(`${file}:${g.line} ${kind} ${g.lines.join(' | ')}`);
             continue;

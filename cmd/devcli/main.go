@@ -123,7 +123,7 @@ func exportPipe(ctx context.Context, src, out string, start, end float64, rectAr
 	spec := media.PipeSpec{Source: src, Start: start, Duration: end - start, FPS: info.FPS, Width: info.Width, Height: info.Height}
 	fmt.Printf("원본 %dx%d %.3ffps, 사각형 %v\n", info.Width, info.Height, info.FPS, px)
 	t0 := time.Now()
-	err = media.ProcessFrames(ctx, spec, out, media.PixelateRects(px), func(f float64) { fmt.Printf("\r파이프 %5.1f%%   ", f*100) })
+	err = media.ProcessFrames(ctx, spec, out, media.BlurRects(px), func(f float64) { fmt.Printf("\r파이프 %5.1f%%   ", f*100) })
 	fmt.Println()
 	if err == nil {
 		fmt.Printf("완료 %s (%.1f초)\n", out, time.Since(t0).Seconds())
@@ -163,7 +163,7 @@ func analyze(ctx context.Context, src, out string, start, end float64) error {
 		return err
 	}
 	t1 := time.Now()
-	err = media.ProcessFrames(ctx, spec, out, automask.PixelateFunc(nil, automask.Rects(res.Frames, nil)), func(f float64) { fmt.Printf("\r저장 %5.1f%%   ", f*100) })
+	err = media.ProcessFrames(ctx, spec, out, automask.BlurFunc(nil, automask.Rects(res.Frames, nil)), func(f float64) { fmt.Printf("\r저장 %5.1f%%   ", f*100) })
 	fmt.Println()
 	if err == nil {
 		fmt.Printf("저장 %.1f초: %s\n", time.Since(t1).Seconds(), out)

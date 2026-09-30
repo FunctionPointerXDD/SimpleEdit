@@ -1,5 +1,10 @@
 // ExportRequest.Rects는 레터박스를 뺀 영상 영역 기준 0~1 비율 좌표다.
 // ProgressEvent.Remaining은 남은 초이고, 아직 모르면 -1이다.
+// ExportRequest.Overwrite가 true이고 이름·저장 폴더가 마지막 저장과 같으면 그 파일을 새 내용으로 바꾼다.
+// 그 밖에는 겹치지 않는 새 이름(이름_2.mp4 등)으로 저장한다. 다른 기존 파일은 덮어쓰지 않는다.
+// 덮어쓸 때는 옆에 임시 파일로 먼저 저장하고 성공하면 바꿔 넣어, 실패·취소해도 기존 파일이 남는다.
+// 시각·길이(start, end, duration)는 모두 초 단위다. ProgressEvent.Percent는 0~100이다.
+// ProgressEvent.Stage: 다운로드는 start·download·merge·convert, 저장은 export, 분석은 analyze
 
 package main
 
@@ -9,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,13 +53,14 @@ type VideoInfo struct {
 }
 
 type ExportRequest struct {
-	Start    float64          `json:"start"`
-	End      float64          `json:"end"`
-	Rects    []media.Rect     `json:"rects"`
-	FileName string           `json:"fileName"`
-	Auto     []string         `json:"auto"`
-	Mute     bool             `json:"mute"`
-	Exclude  map[string][]int `json:"exclude"`
+	Start     float64          `json:"start"`
+	End       float64          `json:"end"`
+	Rects     []media.Rect     `json:"rects"`
+	FileName  string           `json:"fileName"`
+	Auto      []string         `json:"auto"`
+	Mute      bool             `json:"mute"`
+	Exclude   map[string][]int `json:"exclude"`
+	Overwrite bool             `json:"overwrite"`
 }
 
 type ProgressEvent struct {
@@ -74,14 +81,16 @@ type App struct {
 	info       media.Info
 	version    int
 	lastOutput string
-	auto       map[string]automask.Result
+	lastName   string
+	lastDir    string
+	auto       map[string]*automask.Coverage
 
 	detMu   sync.Mutex
 	faceDet *detect.FaceDetector
 }
 
 func NewApp() *App {
-	return &App{updateDone: make(chan struct{}), auto: map[string]automask.Result{}}
+	return &App{updateDone: make(chan struct{}), auto: map[string]*automask.Coverage{}}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -236,7 +245,8 @@ func (a *App) load(ctx context.Context, path, workDir string, emit func(float64,
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.source, a.preview, a.info = path, preview, info
-	a.auto = map[string]automask.Result{}
+	a.auto = map[string]*automask.Coverage{}
+	a.lastOutput, a.lastName, a.lastDir = "", "", ""
 	a.version++
 	return VideoInfo{
 		URL:      "/video/current?v=" + strconv.Itoa(a.version),
@@ -251,8 +261,8 @@ func (a *App) CloseVideo() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.source, a.preview, a.info = "", "", media.Info{}
-	a.auto = map[string]automask.Result{}
-	a.lastOutput = ""
+	a.auto = map[string]*automask.Coverage{}
+	a.lastOutput, a.lastName, a.lastDir = "", "", ""
 	applog.Printf("영상 닫음")
 }
 
@@ -288,7 +298,7 @@ func (a *App) ChooseOutputFolder() (string, error) {
 	return dir, nil
 }
 
-// 자동 박스가 있으면 프레임 파이프(Go 모자이크), 없으면 ffmpeg 필터로 저장
+// 자동 박스가 있으면 프레임 파이프(Go 블러), 없으면 ffmpeg 필터로 저장
 func (a *App) Export(req ExportRequest) (string, error) {
 	a.mu.Lock()
 	source, info, outDir := a.source, a.info, a.settings.OutputDirOrDesktop()
@@ -323,9 +333,14 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	if free := appdir.FreeBytes(outDir); free >= 0 && free < estimateSize(info, end-start) {
 		return "", userError(msgNoSpace, errors.New("남은 공간 "+strconv.FormatInt(free, 10)))
 	}
-	out := appdir.OutputPath(outDir, name)
+	out, replace := a.exportTarget(outDir, name, req.Overwrite)
+	write := out
+	if replace {
+		write = savingPath(out)
+		os.Remove(write)
+	}
 	rects := media.RectsToPixels(req.Rects, info.Width, info.Height)
-	applog.Printf("저장: %.2f~%.2f초, 사각형 %v, 자동 %v, 무음 %v → %s", start, end, rects, req.Auto, req.Mute, out)
+	applog.Printf("저장: %.2f~%.2f초, 사각형 %v, 자동 %v, 무음 %v, 덮어쓰기 %v → %s", start, end, rects, req.Auto, req.Mute, replace, out)
 
 	emit := a.progressEmitter(evExportProgress)
 	emit(0, "export")
@@ -333,19 +348,42 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	if auto != nil {
 		spec := pipeSpec(source, info, start, end)
 		spec.Mute = req.Mute
-		err = media.ProcessFrames(ctx, spec, out, automask.PixelateFunc(req.Rects, auto), progress)
+		err = media.ProcessFrames(ctx, spec, write, automask.BlurFunc(req.Rects, auto), progress)
 	} else {
 		err = media.Export(ctx, media.ExportSpec{
-			Source: source, Output: out, Start: start, Duration: end - start, Rects: rects, Mute: req.Mute,
+			Source: source, Output: write, Start: start, Duration: end - start, Rects: rects, Mute: req.Mute,
 		}, progress)
 	}
 	if err != nil {
 		return "", exportError(err)
 	}
+	if replace {
+		if err := os.Rename(write, out); err != nil {
+			os.Remove(write)
+			return "", userError(msgOverwriteFail, err)
+		}
+	}
+	tools.NotifyShell(out, !replace)
 	a.mu.Lock()
-	a.lastOutput = out
+	a.lastOutput, a.lastName, a.lastDir = out, name, outDir
 	a.mu.Unlock()
 	return out, nil
+}
+
+// 덮어쓰기를 원하고 이름·폴더가 마지막 저장과 같으면 그 파일(true), 아니면 겹치지 않는 새 경로
+func (a *App) exportTarget(outDir, name string, overwrite bool) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if overwrite && a.lastOutput != "" && name == a.lastName &&
+		strings.EqualFold(filepath.Clean(outDir), filepath.Clean(a.lastDir)) {
+		return a.lastOutput, true
+	}
+	return appdir.OutputPath(outDir, name), false
+}
+
+// 이름.mp4 옆의 임시 저장 경로. 확장자가 .mp4여야 ffmpeg가 형식을 안다.
+func savingPath(out string) string {
+	return strings.TrimSuffix(out, filepath.Ext(out)) + ".saving.mp4"
 }
 
 // 비트레이트(모르면 8Mbps) × 길이 × 1.5 + 50MB

@@ -1,7 +1,6 @@
 package automask
 
 import (
-	"image"
 	"testing"
 
 	"simpleEdit/internal/frame"
@@ -22,18 +21,9 @@ func TestDetectSize(t *testing.T) {
 	}
 }
 
-func TestBlockSize(t *testing.T) {
-	tests := map[int]int{40: 16, 128: 16, 200: 25, 400: 50}
-	for side, want := range tests {
-		if got := blockSize(image.Rect(0, 0, side, side/2)); got != want {
-			t.Errorf("blockSize(%d) = %d, want %d", side, got, want)
-		}
-	}
-}
-
-func TestPixelateFuncUsesFrameBoxes(t *testing.T) {
+func TestBlurFuncUsesFrameBoxes(t *testing.T) {
 	auto := [][]media.Rect{nil, {{X: 0.5, Y: 0, W: 0.5, H: 1}}}
-	fn := PixelateFunc([]media.Rect{{X: 0, Y: 0, W: 0.25, H: 1}}, auto)
+	fn := BlurFunc([]media.Rect{{X: 0, Y: 0, W: 0.25, H: 1}}, auto)
 	for n := 0; n < 3; n++ {
 		f := frame.New(64, 16)
 		for i := range f.Pix {

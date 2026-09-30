@@ -1,8 +1,12 @@
+// NotifyShell: 바탕화면(특히 OneDrive 동기화 폴더)은 ffmpeg가 만든 파일이나 이름 바꿔 넣은 파일을
+// 늦게 보이거나 안 보일 때가 있어, 저장 뒤 탐색기에 직접 알린다(2026-09-30 사용자 신고).
+
 package tools
 
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"unsafe"
 
@@ -10,6 +14,16 @@ import (
 )
 
 const createNoWindow = 0x08000000
+
+const (
+	shcneCreate     = 0x00000002
+	shcneUpdateItem = 0x00002000
+	shcneUpdateDir  = 0x00001000
+	shcnfPathW      = 0x0005
+	shcnfFlush      = 0x1000
+)
+
+var shChangeNotify = windows.NewLazySystemDLL("shell32.dll").NewProc("SHChangeNotify")
 
 // CREATE_NO_WINDOW로 콘솔 창이 뜨지 않게 한다.
 func hideWindow(c *exec.Cmd) {
@@ -88,4 +102,22 @@ func longPath(p string) string {
 		return p
 	}
 	return windows.UTF16ToString(buf[:n])
+}
+
+// 새 파일이면 만들어짐, 아니면 바뀜으로 알리고 들어 있는 폴더도 다시 읽게 한다.
+func NotifyShell(path string, created bool) {
+	event := uintptr(shcneUpdateItem)
+	if created {
+		event = shcneCreate
+	}
+	for _, n := range []struct {
+		event uintptr
+		path  string
+	}{{event, path}, {shcneUpdateDir, filepath.Dir(path)}} {
+		p, err := windows.UTF16PtrFromString(n.path)
+		if err != nil {
+			return
+		}
+		shChangeNotify.Call(n.event, shcnfPathW|shcnfFlush, uintptr(unsafe.Pointer(p)), 0)
+	}
 }

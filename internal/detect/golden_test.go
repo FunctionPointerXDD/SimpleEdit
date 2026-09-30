@@ -68,7 +68,7 @@ func openFaceDetector(t *testing.T) *FaceDetector {
 	if models == "" {
 		models = filepath.Join("..", "..", "tools", "models")
 	}
-	model := filepath.Join(models, "face_yunet_2023mar.onnx")
+	model := filepath.Join(models, "face_yunet_2026may.onnx")
 	for _, p := range []string{lib, model} {
 		if _, err := os.Stat(p); err != nil {
 			t.Skipf("%s 없음 (scripts/fetch-tools.sh ml)", p)

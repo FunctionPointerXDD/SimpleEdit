@@ -4,6 +4,7 @@ export namespace main {
 	    kind: string;
 	    start: number;
 	    end: number;
+	    fresh: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new AnalyzeRequest(source);
@@ -14,6 +15,7 @@ export namespace main {
 	        this.kind = source["kind"];
 	        this.start = source["start"];
 	        this.end = source["end"];
+	        this.fresh = source["fresh"];
 	    }
 	}
 	export class AutoMask {
@@ -48,6 +50,7 @@ export namespace main {
 	    auto: string[];
 	    mute: boolean;
 	    exclude: Record<string, Array<number>>;
+	    overwrite: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ExportRequest(source);
@@ -62,6 +65,7 @@ export namespace main {
 	        this.auto = source["auto"];
 	        this.mute = source["mute"];
 	        this.exclude = source["exclude"];
+	        this.overwrite = source["overwrite"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

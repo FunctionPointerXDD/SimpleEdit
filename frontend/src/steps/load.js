@@ -92,7 +92,7 @@ export const loadStep = {
                 progress.start('start');
                 reveal(progress.el);
             }
-            off = api.onProgress('download', (p) => {
+            off = api.onProgress(api.EVENTS.downloadProgress, (p) => {
                 if (progress.el.hidden) {
                     progress.start(p.stage);
                     reveal(progress.el);

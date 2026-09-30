@@ -35,3 +35,5 @@ func Reveal(path string) error {
 }
 
 func longPath(p string) string { return p }
+
+func NotifyShell(string, bool) {}

@@ -1,5 +1,5 @@
 // facecheck: 긴 변 gtDetectSize로 모든 프레임을 검출한 결과를 유사 정답으로 삼아
-// filterCandidates(큰 박스 기준 점수, 작은 박스 기준 점수, 큰 박스 폭)별 놓침을 비교한다.
+// filterCandidates(짧은 트랙 검출 수, 짧은 트랙 기준 점수)별 놓침을 비교한다. 폭 기준은 기본값
 
 package main
 
@@ -18,10 +18,10 @@ import (
 const gtDetectSize = 1280
 
 var filterCandidates = []struct {
-	strong, weak float32
-	large        float64
+	shortDet   int
+	shortScore float32
 }{
-	{0, 0, 0}, {0.7, 0, 0.06}, {0.7, 0, 0.07}, {0.7, 0, 0.08},
+	{0, 0}, {5, 0.75}, {10, 0.75}, {10, 0.8}, {15, 0.8}, {20, 0.85},
 }
 
 // 검출은 한 번만 모으고 후보마다 Track만 다시 돌려 놓침·표시 박스를 센다.
@@ -57,7 +57,7 @@ func facecheck(ctx context.Context, src string, start, end float64, gtScore floa
 	}
 	fmt.Printf("유사 정답: %d프레임, 얼굴 %d건 (점수 %.2f 이상, %dpx)\n", len(gt), total, gtScore, gtDetectSize)
 	for _, c := range filterCandidates {
-		o.Track.Strong, o.Track.Weak, o.Track.Large = c.strong, c.weak, c.large
+		o.Track.ShortDetections, o.Track.ShortScore = c.shortDet, c.shortScore
 		tracked, st := automask.Track(samples, frames, o.Track)
 		boxes := automask.Rects(tracked, nil)
 		miss, shown := 0, 0
@@ -71,9 +71,9 @@ func facecheck(ctx context.Context, src string, start, end float64, gtScore floa
 		for _, b := range boxes {
 			shown += len(b)
 		}
-		fmt.Printf("폭≥%.2f는 %.2f, 그 외 %.2f | 놓침 %d/%d (%.2f%%) | 표시 박스 %d | 트랙 남김 %d, 버림 %d\n",
-			c.large, c.strong, c.weak, miss, total, 100*float64(miss)/float64(max(1, total)), shown, st.Kept, st.Dropped)
-		if verbose && c.large == automask.DefaultTrackOptions.Large && c.strong == automask.DefaultTrackOptions.Strong {
+		fmt.Printf("검출 %2d회 미만은 %.2f | 놓침 %d/%d (%.2f%%) | 표시 박스 %d | 트랙 남김 %d, 버림 %d\n",
+			c.shortDet, c.shortScore, miss, total, 100*float64(miss)/float64(max(1, total)), shown, st.Kept, st.Dropped)
+		if verbose && c.shortDet == automask.DefaultTrackOptions.ShortDetections && c.shortScore == automask.DefaultTrackOptions.ShortScore {
 			printTracks(st, info.FPS, start)
 		}
 	}
@@ -103,16 +103,23 @@ func groundTruth(ctx context.Context, spec media.PipeSpec, det *detect.FaceDetec
 	return gt, err
 }
 
-// 기준 박스 넓이의 80% 이상을 덮는 마스크가 하나라도 있으면 true
+// 기준 박스 안 9×9 점 중 80% 이상이 어느 마스크 내접 타원(저장과 같은 모양) 안에 들면 true
 func covered(g media.Rect, masks []media.Rect) bool {
-	for _, m := range masks {
-		x0, y0 := max(g.X, m.X), max(g.Y, m.Y)
-		x1, y1 := min(g.X+g.W, m.X+m.W), min(g.Y+g.H, m.Y+m.H)
-		if x1 > x0 && y1 > y0 && (x1-x0)*(y1-y0) >= 0.8*g.W*g.H {
-			return true
+	const n = 9
+	in := 0
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
+			px, py := g.X+g.W*(float64(i)+0.5)/n, g.Y+g.H*(float64(j)+0.5)/n
+			for _, m := range masks {
+				dx, dy := (px-(m.X+m.W/2))/(m.W/2), (py-(m.Y+m.H/2))/(m.H/2)
+				if dx*dx+dy*dy <= 1 {
+					in++
+					break
+				}
+			}
 		}
 	}
-	return false
+	return in*10 >= n*n*8
 }
 
 // 검출 수가 많은 트랙부터 30개까지 출력한다.
