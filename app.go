@@ -1,5 +1,7 @@
 // ExportRequest.Rects는 레터박스를 뺀 영상 영역 기준 0~1 비율 좌표다.
 // ProgressEvent.Remaining은 남은 초이고, 아직 모르면 -1이다.
+// 유튜브 영상 이름은 yt-dlp가 알려 준 제목, 없으면 youtubeName이다. 받은 원본은 7일 보관(appdir.KeepDays).
+// VideoInfo.Lowered는 1080p를 못 받아 720p로 받았다는 뜻이다.
 // ExportRequest.Overwrite가 true이고 이름·저장 폴더가 마지막 저장과 같으면 그 파일을 새 내용으로 바꾼다.
 // 그 밖에는 겹치지 않는 새 이름(이름_2.mp4 등)으로 저장한다. 다른 기존 파일은 덮어쓰지 않는다.
 // 덮어쓸 때는 옆에 임시 파일로 먼저 저장하고 성공하면 바꿔 넣어, 실패·취소해도 기존 파일이 남는다.
@@ -9,8 +11,10 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,13 +34,15 @@ import (
 	"simpleEdit/internal/tools"
 )
 
+const youtubeName = "유튜브 영상"
+
 const (
 	evDownloadProgress = "download:progress"
 	evExportProgress   = "export:progress"
 )
 
 const (
-	workMaxAge       = 7 * 24 * time.Hour
+	workMaxAge       = appdir.KeepDays * 24 * time.Hour
 	updateTimeout    = 2 * time.Minute
 	updateWaitMax    = 20 * time.Second
 	shutdownWaitMax  = 5 * time.Second
@@ -50,6 +56,15 @@ type VideoInfo struct {
 	Width    int     `json:"width"`
 	Height   int     `json:"height"`
 	Name     string  `json:"name"`
+	Reused   bool    `json:"reused"`
+	Lowered  bool    `json:"lowered"`
+}
+
+type RecentVideo struct {
+	ID       string  `json:"id"`
+	Title    string  `json:"title"`
+	Duration float64 `json:"duration"`
+	SavedAt  int64   `json:"savedAt"`
 }
 
 type ExportRequest struct {
@@ -146,7 +161,7 @@ func (a *App) shutdown(ctx context.Context) {
 	applog.Close()
 }
 
-// 주소 검사 → yt-dlp 갱신 대기(최대 20초) → 받기 → load. 실패하면 작업 폴더 삭제
+// 7일 안에 받은 같은 주소가 있으면 그 파일을 연다(실패하면 새로 받음). 아니면 갱신 대기 → 받기 → load
 func (a *App) Download(rawURL string) (VideoInfo, error) {
 	videoURL, err := download.NormalizeURL(rawURL)
 	if err != nil {
@@ -160,6 +175,17 @@ func (a *App) Download(rawURL string) (VideoInfo, error) {
 
 	emit := a.progressEmitter(evDownloadProgress)
 	emit(0, string(download.StageStart))
+	if r, ok := appdir.FindDownload(videoURL); ok {
+		applog.Printf("받아 둔 원본 재사용: %s → %s", videoURL, r.Path)
+		info, err := a.openDownloaded(ctx, r, emit)
+		if err == nil {
+			return info, nil
+		}
+		if ctx.Err() != nil {
+			return VideoInfo{}, downloadError(ctx.Err())
+		}
+		applog.Printf("받아 둔 원본을 열지 못해 새로 받음: %v", err)
+	}
 	select {
 	case <-a.updateDone:
 	case <-time.After(updateWaitMax):
@@ -172,19 +198,65 @@ func (a *App) Download(rawURL string) (VideoInfo, error) {
 		return VideoInfo{}, downloadError(err)
 	}
 	applog.Printf("다운로드: %s → %s", videoURL, workDir)
-	path, err := download.Download(ctx, videoURL, workDir, func(p download.Progress) {
+	res, err := download.Download(ctx, videoURL, workDir, func(p download.Progress) {
 		emit(p.Frac, string(p.Stage))
 	})
 	if err != nil {
 		os.RemoveAll(workDir)
 		return VideoInfo{}, downloadError(err)
 	}
-	info, err := a.load(ctx, path, workDir, emit)
+	info, err := a.load(ctx, res.Path, workDir, emit)
 	if err != nil {
 		os.RemoveAll(workDir)
 		return VideoInfo{}, downloadError(err)
 	}
-	info.Name = "유튜브 영상"
+	info.Name, info.Lowered = cmp.Or(res.Title, youtubeName), res.Lowered
+	meta := appdir.Meta{URL: videoURL, Title: info.Name, Duration: info.Duration, File: res.Path, SavedAt: time.Now()}
+	if err := appdir.WriteMeta(workDir, meta); err != nil {
+		applog.Printf("받은 영상 기록 실패: %v", err)
+	}
+	return info, nil
+}
+
+// 최근 받은 영상 목록을 화면용(받은 시각은 유닉스 밀리초)으로 바꾼다.
+func (a *App) RecentVideos() []RecentVideo {
+	out := []RecentVideo{}
+	for _, r := range appdir.RecentDownloads() {
+		out = append(out, RecentVideo{ID: r.ID, Title: r.Meta.Title, Duration: r.Meta.Duration, SavedAt: r.Meta.SavedAt.UnixMilli()})
+	}
+	return out
+}
+
+// 목록에 있는 id만 받아 그 폴더의 원본을 다시 받지 않고 연다.
+func (a *App) OpenRecent(id string) (VideoInfo, error) {
+	r, ok := appdir.RecentByID(id)
+	if !ok {
+		return VideoInfo{}, userError(msgRecentGone, fmt.Errorf("최근 영상 없음: %q", id))
+	}
+	ctx, done, err := a.jobs.Begin(a.ctx)
+	if err != nil {
+		return VideoInfo{}, downloadError(err)
+	}
+	defer done()
+	emit := a.progressEmitter(evDownloadProgress)
+	emit(0, string(download.StageStart))
+	info, err := a.openDownloaded(ctx, r, emit)
+	switch {
+	case err == nil:
+		return info, nil
+	case ctx.Err() != nil:
+		return VideoInfo{}, downloadError(ctx.Err())
+	}
+	return VideoInfo{}, userError(msgRecentGone, err)
+}
+
+// 받아 둔 폴더를 작업 폴더로 삼아 load하고 제목과 재사용 표시를 붙인다.
+func (a *App) openDownloaded(ctx context.Context, r appdir.Recent, emit func(float64, string)) (VideoInfo, error) {
+	info, err := a.load(ctx, r.Path, filepath.Dir(r.Path), emit)
+	if err != nil {
+		return VideoInfo{}, err
+	}
+	info.Name, info.Reused = cmp.Or(r.Meta.Title, youtubeName), true
 	return info, nil
 }
 

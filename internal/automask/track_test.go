@@ -203,3 +203,28 @@ func TestTrackShortNeedsHighScore(t *testing.T) {
 		}
 	}
 }
+
+func TestSmoothKeepsMotionRemovesJitter(t *testing.T) {
+	var line, shaky []obs
+	for n := 0; n < 40; n++ {
+		x := 0.1 + 0.005*float64(n)
+		line = append(line, obs{frame: n, box: rect(x, 0.2, 0.1, 0.1)})
+		d := 0.004 * float64(n%2*2-1)
+		shaky = append(shaky, obs{frame: n, box: rect(0.3+d, 0.2, 0.1+d, 0.1)})
+	}
+	sl := smooth(line, 3, 6)
+	for i := 10; i < 30; i++ {
+		if !nearRect(sl[i].box, line[i].box) {
+			t.Fatalf("일정하게 움직이면 가운데 구간은 그대로여야 함(늦게 따라가면 안 됨): %d %v → %v", i, line[i].box, sl[i].box)
+		}
+	}
+	ss := smooth(shaky, 3, 6)
+	for i := 10; i < 30; i++ {
+		if math.Abs(ss[i].box.X+ss[i].box.W/2-0.35) > 0.0005 || math.Abs(ss[i].box.W-0.1) > 0.0005 {
+			t.Fatalf("떨림이 남음: %d %+v", i, ss[i].box)
+		}
+	}
+	if got := smooth(line, 0, 0); &got[0] != &line[0] {
+		t.Error("시그마 0이면 그대로 돌려줘야 함")
+	}
+}

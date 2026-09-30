@@ -20,4 +20,8 @@ export function OpenLocal():Promise<main.VideoInfo>;
 
 export function OpenOutputFolder():Promise<void>;
 
+export function OpenRecent(arg1:string):Promise<main.VideoInfo>;
+
 export function OutputFolder():Promise<string>;
+
+export function RecentVideos():Promise<Array<main.RecentVideo>>;

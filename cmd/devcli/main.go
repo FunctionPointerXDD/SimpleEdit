@@ -33,14 +33,14 @@ func main() {
 			defer cancel()
 			ctx = c
 		}
-		var path string
+		var res download.Result
 		start := time.Now()
-		path, err = download.Download(ctx, os.Args[2], os.Args[3], func(p download.Progress) {
+		res, err = download.Download(ctx, os.Args[2], os.Args[3], func(p download.Progress) {
 			fmt.Printf("\r%-8s %5.1f%%   ", p.Stage, p.Frac*100)
 		})
 		fmt.Println()
 		if err == nil {
-			fmt.Printf("완료 %s (%.1f초)\n", path, time.Since(start).Seconds())
+			fmt.Printf("완료 %s [%s] (%.1f초)\n", res.Path, res.Title, time.Since(start).Seconds())
 		}
 	case "probe":
 		need(3)

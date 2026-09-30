@@ -1,14 +1,14 @@
 // MIN_DRAG_PX보다 작게 끈 것은 클릭으로 보고, 그 자리의 자동 박스를 빼거나 되살린다.
 // 가림 표시는 영상 프레임을 저장과 같은 세기로 흐려 그린다. 사각형은 media.BlurSigma(긴 변 20%)다.
 // 자동 얼굴은 저장(frame.BlurEllipse)과 같게 박스에 내접한 타원, 직접 그린 곳은 사각형이다.
-// 타원은 media.FaceBlurSigma(14%) 세기로, 바깥 ELLIPSE_FEATHER 구간을 smoothstep으로 원본과 섞는다.
+// 타원은 media.FaceBlurSigma(8%) 세기로, 바깥 ELLIPSE_FEATHER 구간을 smoothstep으로 원본과 섞는다.
 // 직접 가림이 꽉 차도 누른 자리에 자동 박스가 있으면 뺄 수 있다. 겹치면 가장 작은 박스를 고른다.
 
 import {h} from '../ui/dom.js';
 
 const MIN_DRAG_PX = 8;
 const BLUR_SHARE = 0.2;
-const FACE_BLUR_SHARE = 0.14;
+const FACE_BLUR_SHARE = 0.08;
 const ELLIPSE_FEATHER = 0.25;
 const MIN_BLUR_SIGMA = 4;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));

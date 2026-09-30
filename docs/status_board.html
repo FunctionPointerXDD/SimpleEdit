@@ -339,7 +339,7 @@
             <ul>
               <li>사람이 라벨링한 검증 세트 기준 얼굴 놓침 비율 (지금은 유사 정답 기준만 측정)</li>
               <li>같은 파일 덮어쓰기와 파일 잠김 안내의 실제 Windows 동작 (이름 규칙은 Go 테스트, 화면은 모의 UI로만 확인)</li>
-              <li>약해진 얼굴 블러(14%·가장자리 섞기)의 실제 영상 소감, 강사님 PC에서의 분석 시간, 강사님 창 높이에서 저장 버튼 줄이 다 보이는지</li>
+              <li>약해진 얼굴 블러(8%·가장자리 섞기)의 실제 영상 소감, 강사님 PC에서의 분석 시간, 강사님 창 높이에서 저장 버튼 줄이 다 보이는지</li>
               <li>소리 없애기·트랙 빼기의 실제 Windows 앱 화면 동작 (모의 UI로만 확인)</li>
               <li>Shorts·비공개·삭제 영상 실제 주소에서의 안내</li>
               <li>인터넷 차단 상태 시작, 카카오톡 전송 재생</li>
@@ -397,7 +397,7 @@
               </tr>
               <tr>
                 <td>추가</td><td>안정성 보완</td><td><span class="st info">구현</span></td>
-                <td>403 자동 재시도(총 2회), 생방송 분류, 종료 시 미완성 파일 정리 대기(최대 5초), 단계 간 <code>&lt;video&gt;</code> 재사용, 최대화 시작. 미리보기를 한 번에 최대 4MB 조각(206)으로 응답</td>
+                <td>403·받는 도중 끊김 자동 재시도(총 3회, 3·8초 쉼), 생방송 분류, 종료 시 미완성 파일 정리 대기(최대 5초), 단계 간 <code>&lt;video&gt;</code> 재사용, 최대화 시작. 미리보기를 한 번에 최대 4MB 조각(206)으로 응답</td>
                 <td><code>TestCancelAndWait</code>, <code>TestServeVideoCapsChunk</code>, 모의 UI "영상 파일 재요청 0회", 32분 영상 사용자 확인</td>
                 <td>-</td>
               </tr>
@@ -435,7 +435,7 @@
             <rect class="st" x="20" y="40" width="180" height="76" rx="8"/><text class="t" x="32" y="64">원본 영상</text><text class="s" x="32" y="84">작업 폴더 또는 로컬 파일</text><text class="s" x="32" y="100">자른 구간만</text>
             <rect class="n" x="235" y="40" width="190" height="76" rx="8"/><text class="t" x="247" y="64">ffmpeg 디코딩</text><text class="s" x="247" y="84">긴 변 640px, 고정 fps</text><text class="s" x="247" y="100">raw bgr24 (DecodeFrames)</text>
             <rect class="n" x="460" y="40" width="190" height="76" rx="8"/><text class="t" x="472" y="64">YuNet 검출 (CPU)</text><text class="s" x="472" y="84">2026may, 640×384 입력</text><text class="s" x="472" y="100">초당 30번, 점수 0.6 이상</text>
-            <rect class="n" x="685" y="40" width="190" height="76" rx="8"/><text class="t" x="697" y="64">추적 (Track)</text><text class="s" x="697" y="84">보간 0.5초·유지 0.3초·40%</text><text class="s" x="697" y="100">큰 약한·짧은 약한 트랙 버림</text>
+            <rect class="n" x="685" y="40" width="190" height="76" rx="8"/><text class="t" x="697" y="64">추적 (Track)</text><text class="s" x="697" y="84">보간·유지·부드럽게·60%</text><text class="s" x="697" y="100">큰 약한·짧은 약한 트랙 버림</text>
             <rect class="mem" x="905" y="40" width="175" height="76" rx="8"/><text class="t" x="917" y="64">App.auto (메모리)</text><text class="s" x="917" y="84">영상 전체 프레임 번호</text><text class="s" x="917" y="100">기준 박스 + 트랙 번호</text>
 
             <rect class="n" x="905" y="180" width="175" height="76" rx="8"/><text class="t" x="917" y="204">프론트 state.auto</text><text class="s" x="917" y="224">[x,y,w,h,번호]</text><text class="s" x="917" y="240">소수 4자리 JSON</text>
@@ -444,7 +444,7 @@
 
             <rect class="st" x="20" y="325" width="180" height="76" rx="8"/><text class="t" x="32" y="349">원본 영상</text><text class="s" x="32" y="369">같은 구간</text>
             <rect class="n" x="235" y="325" width="190" height="76" rx="8"/><text class="t" x="247" y="349">ffmpeg 디코딩</text><text class="s" x="247" y="369">원본 해상도, 같은 fps</text><text class="s" x="247" y="385">프레임 번호로 박스 찾기</text>
-            <rect class="n" x="460" y="325" width="190" height="76" rx="8"/><text class="t" x="472" y="349">Go 블러</text><text class="s" x="472" y="369">얼굴: 타원 14%·가장자리 섞기</text><text class="s" x="472" y="385">직접 가린 곳: 사각형 20%</text>
+            <rect class="n" x="460" y="325" width="190" height="76" rx="8"/><text class="t" x="472" y="349">Go 블러</text><text class="s" x="472" y="369">얼굴: 타원 8%·가장자리 섞기</text><text class="s" x="472" y="385">직접 가린 곳: 사각형 20%</text>
             <rect class="n" x="685" y="325" width="190" height="76" rx="8"/><text class="t" x="697" y="349">ffmpeg 인코딩</text><text class="s" x="697" y="369">H.264 + 원본 소리</text><text class="s" x="697" y="385">소리 없애기면 -an</text>
             <rect class="st" x="905" y="325" width="175" height="76" rx="8"/><text class="t" x="917" y="349">저장 폴더 MP4</text><text class="s" x="917" y="369">기본 바탕화면</text>
 
@@ -492,12 +492,12 @@
             <thead><tr><th>항목</th><th>값</th><th>근거</th></tr></thead>
             <tbody>
               <tr><td>검출</td><td>YuNet 2026may(2023mar 가중치, 가변 입력 640×384), 초당 30번, 긴 변 640px, 점수 0.6, 추론 스레드 = 논리 코어 ÷ 2</td><td>초당 15번은 현재 설정에서도 NASA 놓침 0.06% → 0.40%라 30번 유지. 점수는 오탐이 많아 사용자 판단으로 0.4 → 0.6. 2026may는 OpenCV 결과와 0.00005px 일치. 랜드마크 모양 검사는 실제 얼굴 4.5%를 버리고 건물 오탐은 1.4%만 걸러 기각</td></tr>
-              <tr><td>추적</td><td>0.5초 보간, 앞뒤 0.3초 유지, 40% 확대</td><td>현재 전체 설정 기준 놓침: NASA 6.11% / 3.47%, 운전 영상 60초 0.20% (대부분 짧은 트랙 거르기 때문). 확대 50·60%도 거의 같음</td></tr>
+              <tr><td>추적</td><td>0.5초 보간, 앞뒤 0.3초 유지, 부드럽게(중심 0.10초·크기 0.20초 가우시안), 60% 확대</td><td>현재 전체 설정 기준 놓침: NASA 6.45% / 5.26%, 운전 영상 60초 0.20%. 부드럽게 하기로 흔들림(중심 가속) 약 8~10배 감소(1.2~1.5% → 0.11~0.17%)</td></tr>
               <tr><td>오탐 거르기</td><td>평균 폭 8% 이상 트랙은 0.7 이상 검출 필요</td><td>신고 영상 건물 트랙 21개 제거, NASA 놓침 0.02% / 0.06% 유지 (모든 트랙 0.7이면 2.36%로 악화)</td></tr>
               <tr><td>구간 변경</td><td>분석 결과를 영상 전체 기준으로 쌓아 두고 늘어난 부분만 자동 분석</td><td>구간을 다시 잘라도 가림·뺀 트랙 유지 (DB 없이 메모리)</td></tr>
               <tr><td>짧은 트랙</td><td>검출 10회 미만(약 0.33초)이면 최고 점수 0.8 이상이어야 남김</td><td>한두 프레임 스친 오탐 깜빡임 제거(신고 6곳 중 5곳, 2:59 원본 흐림 조각은 남음). 사용자가 0.75 대신 0.8 선택(일일이 빼는 일 줄이기). 군중의 작은 얼굴 놓침은 늘어남</td></tr>
-              <tr><td>가림 방식</td><td>블러. 자동 얼굴: 내접 타원, 시그마 = max(4px, 긴 변 × 14%), 반지름 바깥 25%는 원본과 섞음. 직접 그린 곳: 사각형, 긴 변 × 20%</td><td>사용자 요청(모자이크보다 보기 편함 → 사각형 불안정 → 너무 진함). 타원 놓침은 사각형과 같음. 확대한 얼굴에서 눈·코·입 식별 불가 확인. 번호판 등은 귀퉁이까지 가리려고 사각형 유지</td></tr>
-              <tr><td>속도 (개발 PC)</td><td>2분 1080p30 분석 16.4초(처음 37초), 1080p 60초 사각형 3개 저장 14.3초 (WSL, Ryzen 5 5625U)</td><td>강사님 PC는 미측정 (25분 구간이 5분 걸린다는 신고 뒤 개선)</td></tr>
+              <tr><td>가림 방식</td><td>블러. 자동 얼굴: 내접 타원, 시그마 = max(4px, 긴 변 × 8%), 반지름 바깥 25%는 원본과 섞음. 직접 그린 곳: 사각형, 긴 변 × 20%</td><td>사용자 요청(모자이크보다 보기 편함 → 사각형 불안정 → 너무 진함 20%→14% → 방송 영상 5~7% 측정 뒤 8%). 타원 놓침은 사각형과 같음. 확대한 얼굴에서 눈·코·입 식별 불가 확인. 번호판 등은 귀퉁이까지 가리려고 사각형 유지</td></tr>
+              <tr><td>속도 (개발 PC)</td><td>2분 1080p30 분석 16.4초(처음 37초), 1080p 60초 사각형 3개 저장 14.3초, 얼굴 자동 가림 저장 15.0초(yuv420p 전 21.5초) (WSL, Ryzen 5 5625U)</td><td>강사님 PC는 미측정 (25분 구간이 5분 걸린다는 신고 뒤 개선)</td></tr>
             </tbody>
           </table>
         </div>
@@ -741,12 +741,12 @@
               <tr><td>진입점</td><td><a href="../main.go">main.go</a> :18</td><td>Wails 옵션(최대화 시작, 글자 칸 오른쪽 클릭 허용), AssetServer Handler 등록</td></tr>
               <tr><td>바인딩</td><td><a href="../app.go">app.go</a> :150 Download, :192 OpenLocal, :228 load, :260 CloseVideo, :269 OutputFolder, :280 ChooseOutputFolder, :302 Export, :374 exportTarget(덮어쓸 대상) · <a href="../video_serve.go">video_serve.go</a> :22 serveVideo, :69 chunkRange(4MB 조각)</td><td>프론트 API, 작업 1개 보장, 진행률 이벤트, 임시 파일 후 교체, 미리보기 서빙</td></tr>
               <tr><td>오류 문장</td><td><a href="../errors.go">errors.go</a> :18 문구, :58 downloadError, analyzeError, toolMissingError, fileNameError</td><td>원인별 "원인 + 할 일" 한 문장, 원인은 로그로 (명세: docs/api.json errors)</td></tr>
-              <tr><td>다운로드</td><td><a href="../internal/download/download.go">download.go</a> :53 Args, :76 Download(403 재시도), :169 parser.line, :230 Classify · <a href="../internal/download/url.go">url.go</a> :16</td><td>yt-dlp 인자, 영상·소리 진행률 합산, 실패 분류, 주소 정규화</td></tr>
+              <tr><td>다운로드</td><td><a href="../internal/download/download.go">download.go</a> :62 Args, :87 Download(일시 차단 재시도), :188 parser.line, :251 Classify · <a href="../internal/download/url.go">url.go</a> :16</td><td>yt-dlp 인자, 영상·소리 진행률 합산, 실패 분류, 주소 정규화</td></tr>
               <tr><td>미디어</td><td><a href="../internal/media/filter.go">filter.go</a> :33 BlurSigma, :38 FaceBlurSigma, :56 ToPixels, :89 BlurFilter, :128 ExportArgs · <a href="../internal/media/probe.go">probe.go</a> :64 · <a href="../internal/media/run.go">run.go</a> :29</td><td>블러 세기, 좌표 변환, 필터 문자열(boxblur 3회), ffprobe 파싱, ffmpeg 실행·진행률·실패 시 파일 삭제</td></tr>
               <tr><td>자동 가리기 바인딩</td><td><a href="../automask_app.go">automask_app.go</a> :60 Analyze(빠진 조각만), :126 faceDetector, :163 autoFrames(뺀 트랙 제외), :44 toAutoMask · <a href="../internal/automask/coverage.go">coverage.go</a> :31 Missing, :45 Merge, :69 Window</td><td>분석 작업·진행률, 검출기 1회 로드, 영상 전체 프레임 기준 결과 쌓기·재사용</td></tr>
               <tr><td>추적·분석</td><td><a href="../internal/automask/track.go">track.go</a> :74 Track, :105 required(크기·짧은 트랙 기준), :173 Rects · <a href="../internal/automask/analyze.go">analyze.go</a> :33 OptionsFor, :52 Analyze, :62 Collect, :109 BlurFunc</td><td>보간·유지·확대, 오탐 거르기, 트랙 번호, 얼굴 타원·사각형 블러 적용</td></tr>
               <tr><td>검출</td><td><a href="../internal/detect/yunet.go">yunet.go</a> :44 NewFaceDetector, :101 sessionOptions(스레드), :64 tensors, :125 Detect, :156 decodeYuNet · <a href="../internal/detect/runtime.go">runtime.go</a> :22 Init(SetDllDirectory) · <a href="../internal/detect/frame.go">frame.go</a> :21 InputSize, :30 Letterbox</td><td>ONNX Runtime 가변 입력 세션, OpenCV와 같은 디코딩, 런타임 로드 실패 안내</td></tr>
-              <tr><td>프레임</td><td><a href="../internal/frame/frame.go">frame/frame.go</a> :44 Blur, :47 BlurEllipse, :102 ellipseWeights · <a href="../internal/media/pipe.go">media/pipe.go</a> :84 ProcessFrames, :138 DecodeFrames</td><td>bgr24 프레임, 줄여 흐린 뒤 키우는 블러, 타원 가장자리 섞기, 디코딩→처리→인코딩 파이프</td></tr>
+              <tr><td>프레임</td><td><a href="../internal/frame/frame.go">frame/frame.go</a> :44 Blur, :47 BlurEllipse, :102 ellipseWeights · <a href="../internal/media/pipe.go">media/pipe.go</a> :84 ProcessFrames, :138 DecodeFrames</td><td>bgr24(분석)·yuv420p(저장) 프레임, 평면별로 줄여 흐린 뒤 키우는 블러, 타원 가장자리 섞기, 디코딩→처리→인코딩 파이프</td></tr>
               <tr><td>프로세스</td><td><a href="../internal/tools/tools.go">tools.go</a> :68 Command · <a href="../internal/tools/proc_windows.go">proc_windows.go</a> :29 hideWindow, :41 newProcessTree, :83 Reveal, :108 NotifyShell · <a href="../internal/tools/archive.go">archive.go</a> :10 RunningFromArchive · <a href="../internal/tools/models.go">models.go</a> :15 ORTLib, :22 ModelPath</td><td>bin\ 경로, 콘솔 창 숨김, 트리 종료, stderr 로그, 탐색기 알림, zip 안 실행 감지, 런타임·모델 경로</td></tr>
               <tr><td>작업 관리</td><td><a href="../internal/job/job.go">job.go</a> :21 Begin, :52 CancelAndWait</td><td>동시 작업 1개, 취소, 종료 대기, ETA·전송 간격</td></tr>
               <tr><td>경로·설정</td><td><a href="../internal/appdir/filename.go">filename.go</a> :30 CleanFileName, :65 OutputPath · <a href="../internal/appdir/settings.go">settings.go</a> :38 OutputDirOrDesktop · <a href="../internal/appdir/desktop_windows.go">desktop_windows.go</a> :11 Desktop</td><td>파일 이름 검사, 겹치지 않는 이름, 저장 폴더 기억, OneDrive 바탕화면</td></tr>
@@ -771,7 +771,7 @@
               <tr><td>좌표 전달</td><td>화면 표시 크기 + 사각형</td><td>레터박스를 뺀 영상 영역 기준 0–1 비율</td><td>object-fit: contain 여백 오차 제거, 미리보기 해상도와 무관</td></tr>
               <tr><td>저장 파일</td><td>바탕화면, 고정 이름</td><td>이름 수정, 위치 바꾸기(다음 실행 때도 기억), 기본 바탕화면, 다른 파일과 겹치면 <code>_2</code>. 마지막 저장과 이름·폴더가 같으면 그 파일에 덮어쓰기(바뀐 게 있으면 확인 창, 없으면 아무 일 없음)</td><td>사용자 요청. 기억 여부·덮어쓰기·확인 문구("같은 파일로 덮어쓰시겠습니까?" 확인/취소)는 사용자가 명시</td></tr>
               <tr><td>저장 단계 버튼</td><td>저장하기, 완료 후 폴더 열기·새 영상</td><td>[저장 폴더 열기][다시 저장하기] … [새 영상 편집하기], 새 영상 편집하기는 항상 보이고 확인 창(저장 안 함 / 저장 후 바뀜 / 저장함)</td><td>사용자 요청 (저장 후 이전을 다녀오면 저장하기만 남던 문제)</td></tr>
-              <tr><td>가리는 방식</td><td>모자이크(16px 칸)</td><td>블러. 자동 얼굴은 타원 14% + 가장자리 섞기, 직접 그린 곳은 사각형 20%</td><td>사용자 요청 세 번(모자이크 → 블러, 사각형 → 타원, 너무 진함 → 약하게). 사각형 유지는 번호판 귀퉁이 노출 방지로 사용자 선택</td></tr>
+              <tr><td>가리는 방식</td><td>모자이크(16px 칸)</td><td>블러. 자동 얼굴은 타원 8% + 가장자리 섞기, 직접 그린 곳은 사각형 20%</td><td>사용자 요청 세 번(모자이크 → 블러, 사각형 → 타원, 너무 진함 → 약하게). 사각형 유지는 번호판 귀퉁이 노출 방지로 사용자 선택</td></tr>
               <tr><td>다운로드 형식</td><td><code>bv*[ext=mp4]</code></td><td><code>vcodec^=avc1</code> 우선</td><td>AV1 선택 시 WebView2 재생 실패 가능성</td></tr>
               <tr><td>외부 도구</td><td>yt-dlp, ffmpeg, ffprobe</td><td>+ deno.exe</td><td>최신 yt-dlp의 YouTube 추출에 JS 런타임 필요</td></tr>
               <tr><td>로컬 영상</td><td>MP4 선택</td><td>mp4·mov·m4v·mkv, H.264 8비트가 아니면 720p 미리보기 변환 (저장은 원본에서)</td><td>휴대폰 HEVC·10비트는 WebView2에서 재생 불가</td></tr>
@@ -785,7 +785,7 @@
               <tr><td>얼굴 오탐 기준</td><td>(9장) 점수 0.5</td><td>점수 0.6, 폭 8% 이상 트랙은 0.7, 검출 10회 미만 트랙은 0.8</td><td>사용자 판단(오탐이 많음, 70대 강사가 일일이 빼는 일 최소화). 군중의 작은 얼굴 놓침 증가를 알고 선택</td></tr>
               <tr><td>검출 모델·속도</td><td>YuNet 2023mar</td><td>2023mar 대신 2026may(같은 가중치, 가변 입력), 추론 스레드 = 논리 코어 ÷ 2, 검출은 초당 30번 유지</td><td>25분 구간 5분 신고. 초당 15번은 군중 놓침 7배라 사용자가 기각</td></tr>
               <tr><td>API 명세</td><td>-</td><td>Go 코드에서 <code>cmd/apispec</code>이 <code>docs/api.json</code>·<code>frontend/src/apiSpec.js</code> 생성, QA가 최신 여부·프론트 타입(tsc --checkJs) 검사</td><td>사용자 제안(JSON 명세). 손으로 쓰면 코드와 어긋나서 생성으로. 프론트는 JS 유지, TypeScript 전환은 보류(사용자 동의)</td></tr>
-              <tr><td>안정성</td><td>-</td><td>403 재시도, 생방송 분류, 종료 시 정리 대기, 디스크 여유 확인</td><td>테스트·점검 중 발견</td></tr>
+              <tr><td>안정성</td><td>-</td><td>403·도중 끊김 재시도(3회), 생방송 분류, 종료 시 정리 대기, 디스크 여유 확인</td><td>테스트·점검 중 발견</td></tr>
             </tbody>
           </table>
         </div>
@@ -828,6 +828,9 @@
               <tr><td>09-30</td><td>사용자 요청: 저장 후 이전을 다녀오면 저장하기만 남음, 같은 이름이면 덮어쓰기</td><td>-</td><td>버튼 구성·확인 창, 마지막 저장 파일만 덮어쓰기(임시 파일 후 교체), 바뀐 게 없으면 아무 일 없음. 저장 버튼 줄이 "이전" 막대에 가리던 것 수정</td></tr>
               <tr><td>09-30 13:47</td><td>사용자 신고: 바탕화면에 저장 파일이 안 보임</td><td>app.log 경로 = Windows 바탕화면(<code>OneDrive\바탕 화면</code>), 파일·속성 정상</td><td>저장 뒤 <code>SHChangeNotify</code>로 탐색기 알림. 사용자 "해결되었어"</td></tr>
               <tr><td>09-30</td><td>사각형 블러가 불안정 → 타원, 너무 진함 → 약하게·가장자리 섞기</td><td>facecheck 타원 기준 놓침(사각형과 같음 → 섞기 뒤 NASA 6.11%/3.47%, 운전 0.20%), 확대 얼굴 비교</td><td>자동 얼굴만 타원 14% + 바깥 25% 섞기, 사각형은 20% 유지</td></tr>
+              <tr><td>09-30</td><td>방송 블랙박스 영상(hx_4EDQ3ky4)의 가림 분석 요청</td><td>재블러 비율로 σ 추정(합성 검증 오차 약 10%): 얼굴 블러 σ 6~9px = 영역 긴 변의 5~7%, 번호판은 단색 네모 덮기, 아이디는 별표</td><td>사용자 판단으로 얼굴 블러 14% → 8%(단색 덮기는 하지 않음). 8%에서도 확대 얼굴 식별 불가</td></tr>
+              <tr><td>09-30</td><td>사용자 신고: 블러 위치가 프레임마다 바뀌어 재생 시 많이 흔들림</td><td>검출 박스가 매 프레임 몇 px씩 떨림. facecheck에 흔들림 지표(중심 가속, 폭 변화) 추가해 후보 비교</td><td>트랙별 앞뒤 가우시안 평균(중심 0.10초·크기 0.20초) + 확대 60%. 흔들림 약 8~10배 감소, 운전 영상 놓침 같음</td></tr>
+              <tr><td>09-30</td><td>저장이 왜 오래 걸리는지 질문</td><td>단계별 측정: 파이프 bgr24 변환이 약 30% 차지(원본·출력 모두 yuv420p)</td><td>저장 파이프를 yuv420p로(분석은 bgr24 유지), 색 평면은 절반 크기에서 블러. 1080p 60초 저장 21.5 → 15.0초, 원본 대비 화질 조금 좋아짐. Y·U·V 평면별 일치 테스트 추가</td></tr>
               <tr><td>09-30 점검</td><td>저장 단계 폴더가 들어올 때마다 빈 값으로 시작: "저장 위치가 바뀌었습니다" 오표시, 빈 폴더로 대상 기록 가능</td><td>코드 점검</td><td><code>state.outputFolder</code>에 기억, 기본값을 받기 전 저장 잠금. 죽은 코드(구간 필드, 랜드마크) 정리</td></tr>
             </tbody>
           </table>
@@ -851,7 +854,7 @@
               <li><strong>라이선스 미검토:</strong> 동봉한 ffmpeg는 GPL 빌드라 배포 시 소스 제공 의무 검토 필요. VC++ 런타임은 재배포 조건 확인 필요. 제3자 고지 파일 없음</li>
               <li>폭 8% 미만의 작은 오탐, 원본에서 이미 흐린 조각 같은 10회 이상 오탐은 남을 수 있음 (클릭으로 빼기)</li>
               <li>짧은 트랙 거르기(0.8)로 사람이 많은 장면의 작은 얼굴 놓침이 늘어남 (NASA 군중 3~6%, 운전 영상 0.20%)</li>
-              <li>얼굴 블러를 약하게(14%) 하고 가장자리를 섞어 식별 위험이 조금 늘어남. 확대 비교에서는 눈·코·입 식별 불가였지만 사람 검증 없음</li>
+              <li>얼굴 블러를 약하게(8%) 하고 가장자리를 섞어 식별 위험이 조금 늘어남. 확대 비교에서는 눈·코·입 식별 불가였지만 사람 검증 없음</li>
               <li>얼굴 검출은 CPU만 사용. 강사님 PC 속도 미측정 (번호판 모델 추가 시 GPU(DirectML) 검토)</li>
               <li>YouTube 변경으로 yt-dlp가 깨질 수 있음. 설치 폴더에 쓰기 권한이 없으면 <code>-U</code> 실패(무시됨)</li>
               <li>WebView2 CDP를 쓸 수 없어 실제 앱 자동 테스트 수단이 없음</li>

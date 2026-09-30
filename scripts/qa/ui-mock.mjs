@@ -65,9 +65,17 @@ function installMock({video, meta}) {
                 throw window.__mock.failDownload;
             }
             await fakeProgress('download:progress', ['start', 'download', 'merge'], 60);
-            return {url: `/video/${video}.webm`, duration: 20, width: meta.w, height: meta.h, name: '유튜브 영상'};
+            return {url: `/video/${video}.webm`, duration: 20, width: meta.w, height: meta.h, name: '유튜브 영상', lowered: true};
         },
         OpenLocal: async () => ({}),
+        RecentVideos: async () => window.__mock.recent ?? Array.from({length: 5}, (_, i) => ({
+            id: `2026092${i}-120000`, title: `최근 영상 ${i + 1}`, duration: 60 * (i + 1), savedAt: Date.now() - i * 86400000,
+        })),
+        OpenRecent: async (id) => {
+            window.__mock.openRecentId = id;
+            await fakeProgress('download:progress', ['start'], 30);
+            return {url: `/video/${video}.webm`, duration: 20, width: meta.w, height: meta.h, name: '최근 영상 1', reused: true};
+        },
         CloseVideo: async () => { window.__mock.closed++; },
         Analyze: async (req) => {
             window.__mock.analyzeReq = req;
@@ -147,6 +155,7 @@ await page.waitForSelector('.progress:not([hidden])');
 check('다운로드 중 다음 잠금', await nextBtn().isDisabled());
 await page.waitForSelector('.loaded-card:not([hidden])');
 await shot('1-loaded');
+check('1080p를 못 받았으면 720p 안내', (await page.textContent('.loaded-card')).includes('720p로 받았습니다'));
 
 // 2단계
 await click('다음 ▶');
@@ -428,6 +437,34 @@ await page.waitForTimeout(200);
 check('처음으로 돌아감', (await page.textContent('.step-label')).includes('1 / 4'));
 check('새 영상 편집하기 → CloseVideo', await page.evaluate(() => window.__mock.closed === 1));
 check('불러온 영상 표시 없음', await page.$eval('.loaded-card', (e) => e.hidden));
+
+// 최근 받은 영상: 버튼 → 목록 창(7일 안 전부), 줄을 누르면 다시 받지 않고 열기
+check('최근 받은 영상 버튼이 화면 안', await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.panel.subtle button')].find((x) => x.textContent === '최근 받은 영상');
+    return !!b && b.getBoundingClientRect().bottom <= document.querySelector('.navbar').getBoundingClientRect().top;
+}));
+await click('최근 받은 영상');
+await page.waitForSelector('.modal .pick-item');
+const recentTexts = await page.$$eval('.modal .pick-item', (bs) => bs.map((b) => b.textContent));
+check('목록 창에 7일 안 영상 전부', recentTexts.length === 5, String(recentTexts.length));
+check('줄에 제목·길이·받은 때', recentTexts[0].includes('최근 영상 1') && recentTexts[0].includes('길이 1분 0초') && recentTexts[0].includes('오늘') &&
+    recentTexts[1].includes('어제'), recentTexts.join(' / '));
+check('목록 창 처음 초점은 첫 줄', await page.evaluate(() => document.activeElement?.classList.contains('pick-item')));
+await shot('1-recent');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(100);
+check('Esc로 닫으면 아무것도 안 엶', (await page.$('.modal')) === null && (await page.evaluate(() => window.__mock.openRecentId)) === undefined);
+await click('최근 받은 영상');
+await page.locator('.modal .pick-item').first().click();
+await page.waitForSelector('.loaded-card:not([hidden])');
+check('최근 영상 열기 요청 id', (await page.evaluate(() => window.__mock.openRecentId)) === '20260920-120000');
+check('다시 받지 않았다는 안내', (await page.textContent('.loaded-card')).includes('다시 받지 않았습니다'));
+check('최근 영상 연 뒤 다음 열림', !(await nextBtn().isDisabled()));
+await page.evaluate(() => { window.__mock.recent = []; });
+await click('최근 받은 영상');
+await page.waitForSelector('.modal');
+check('받은 영상이 없으면 안내', (await page.textContent('.modal')).includes('7일 안에 받은 영상이 없습니다'));
+await click('닫기');
 
 console.log(results.join('\n'));
 const errors = logs.filter((l) => l.includes('pageerror') || (l.startsWith('[error]') && !l.includes('404')));

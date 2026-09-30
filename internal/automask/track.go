@@ -1,5 +1,8 @@
 // 좌표는 모두 화면 대비 0~1 비율이다. MaxGap·Hold는 프레임 수다.
-// MatchIoU는 같은 대상으로 볼 최소 IoU, Expand 0.4는 폭·높이를 40% 키운다는 뜻이다.
+// MatchIoU는 같은 대상으로 볼 최소 IoU, Expand 0.6은 폭·높이를 60% 키운다는 뜻이다.
+// 검출 박스는 프레임마다 몇 px씩 떨려, 트랙마다 앞뒤 관측을 가우시안으로 평균한다(SmoothPos·SmoothSize,
+// 프레임). 앞뒤를 다 알고 하므로 늦게 따라가지 않는다. 그만큼 빠른 움직임에서 박스가 덜 따라가
+// 확대를 40%에서 60%로 늘렸다(2026-09-30: 흔들림 약 8~10배 감소, 운전 영상 놓침 같음, 군중 조금 늘어남).
 // 평균 폭이 Large 이상인 트랙은 최고 점수가 Strong, 아니면 Weak 이상이어야 남는다.
 // 기본 Weak 0은 작은 트랙(멀리 있는 얼굴)을 거르지 않으려는 것이다.
 // ShortDetections보다 적게 검출된 짧은 트랙은 최고 점수가 ShortScore 이상이어야 남는다.
@@ -10,6 +13,7 @@
 package automask
 
 import (
+	"math"
 	"sort"
 
 	"simpleEdit/internal/detect"
@@ -27,10 +31,13 @@ type TrackOptions struct {
 
 	ShortDetections int
 	ShortScore      float32
+
+	SmoothPos  float64
+	SmoothSize float64
 }
 
 var DefaultTrackOptions = TrackOptions{
-	MatchIoU: 0.2, MaxGap: 15, Hold: 8, Expand: 0.4,
+	MatchIoU: 0.2, MaxGap: 15, Hold: 8, Expand: 0.6,
 	Strong: 0.7, Weak: 0, Large: 0.08,
 	ShortDetections: 10, ShortScore: 0.8,
 }
@@ -85,7 +92,7 @@ func Track(samples []Sample, frames int, o TrackOptions) ([][]TrackBox, TrackSta
 			continue
 		}
 		st.Kept++
-		fill(out, tr, st.Kept, o)
+		fill(out, smooth(tr, o.SmoothPos, o.SmoothSize), st.Kept, o)
 	}
 	return out, st
 }
@@ -167,6 +174,44 @@ func fill(out [][]TrackBox, tr []obs, id int, o TrackOptions) {
 	for n := last.frame + 1; n <= last.frame+o.Hold; n++ {
 		put(n, last.box)
 	}
+}
+
+// 앞뒤 관측을 프레임 거리 가우시안 가중치로 평균한다. 중심은 posSigma, 폭·높이는 sizeSigma(프레임)
+func smooth(tr []obs, posSigma, sizeSigma float64) []obs {
+	if posSigma <= 0 && sizeSigma <= 0 {
+		return tr
+	}
+	out := make([]obs, len(tr))
+	for i, o := range tr {
+		var cx, cy, w, h, wp, ws float64
+		for _, q := range tr {
+			d := float64(q.frame - o.frame)
+			kp, ks := gauss(d, posSigma), gauss(d, sizeSigma)
+			cx += kp * (q.box.X + q.box.W/2)
+			cy += kp * (q.box.Y + q.box.H/2)
+			w += ks * q.box.W
+			h += ks * q.box.H
+			wp += kp
+			ws += ks
+		}
+		cx, cy, w, h = cx/wp, cy/wp, w/ws, h/ws
+		out[i] = obs{frame: o.frame, score: o.score, box: media.Rect{X: cx - w/2, Y: cy - h/2, W: w, H: h}}
+	}
+	return out
+}
+
+// 시그마가 0이면 자기 자신(d=0)만 1이다. 3시그마 밖은 0
+func gauss(d, sigma float64) float64 {
+	if sigma <= 0 {
+		if d == 0 {
+			return 1
+		}
+		return 0
+	}
+	if math.Abs(d) > 3*sigma {
+		return 0
+	}
+	return math.Exp(-d * d / (2 * sigma * sigma))
 }
 
 // exclude에 든 ID의 박스만 빼고 Rect를 꺼낸다.

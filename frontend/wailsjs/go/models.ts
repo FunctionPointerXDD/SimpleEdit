@@ -86,12 +86,32 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class RecentVideo {
+	    id: string;
+	    title: string;
+	    duration: number;
+	    savedAt: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecentVideo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.duration = source["duration"];
+	        this.savedAt = source["savedAt"];
+	    }
+	}
 	export class VideoInfo {
 	    url: string;
 	    duration: number;
 	    width: number;
 	    height: number;
 	    name: string;
+	    reused: boolean;
+	    lowered: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new VideoInfo(source);
@@ -104,6 +124,8 @@ export namespace main {
 	        this.width = source["width"];
 	        this.height = source["height"];
 	        this.name = source["name"];
+	        this.reused = source["reused"];
+	        this.lowered = source["lowered"];
 	    }
 	}
 

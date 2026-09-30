@@ -38,6 +38,14 @@ export function OpenOutputFolder() {
   return window['go']['main']['App']['OpenOutputFolder']();
 }
 
+export function OpenRecent(arg1) {
+  return window['go']['main']['App']['OpenRecent'](arg1);
+}
+
 export function OutputFolder() {
   return window['go']['main']['App']['OutputFolder']();
+}
+
+export function RecentVideos() {
+  return window['go']['main']['App']['RecentVideos']();
 }

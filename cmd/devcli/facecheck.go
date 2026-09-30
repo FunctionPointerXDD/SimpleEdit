@@ -1,5 +1,6 @@
 // facecheck: 긴 변 gtDetectSize로 모든 프레임을 검출한 결과를 유사 정답으로 삼아
-// filterCandidates(짧은 트랙 검출 수, 짧은 트랙 기준 점수)별 놓침을 비교한다. 폭 기준은 기본값
+// smoothCandidates(위치·크기를 부드럽게 하는 시간 σ(초), 박스 확대율)별 놓침과 흔들림을 비교한다.
+// 흔들림: 같은 트랙의 연속 세 프레임 중심 2차 차분(가속도), 연속 두 프레임 폭 변화를 박스 폭 대비 %로 평균
 // 덮임은 저장과 같은 타원으로 재고, 가장자리 섞임 구간은 원본이 반 넘게 남으면 덮이지 않은 것으로 본다.
 
 package main
@@ -21,11 +22,8 @@ const gtDetectSize = 1280
 
 const halfBlend = 1 - frame.EllipseFeather/2
 
-var filterCandidates = []struct {
-	shortDet   int
-	shortScore float32
-}{
-	{0, 0}, {5, 0.75}, {10, 0.75}, {10, 0.8}, {15, 0.8}, {20, 0.85},
+var smoothCandidates = []struct{ pos, size, expand float64 }{
+	{0, 0, 0.4}, {0.05, 0.1, 0.4}, {0.05, 0.1, 0.5}, {0.1, 0.2, 0.4}, {0.1, 0.2, 0.5}, {0.1, 0.2, 0.6},
 }
 
 // 검출은 한 번만 모으고 후보마다 Track만 다시 돌려 놓침·표시 박스를 센다.
@@ -60,11 +58,11 @@ func facecheck(ctx context.Context, src string, start, end float64, gtScore floa
 		total += len(g)
 	}
 	fmt.Printf("유사 정답: %d프레임, 얼굴 %d건 (점수 %.2f 이상, %dpx)\n", len(gt), total, gtScore, gtDetectSize)
-	for _, c := range filterCandidates {
-		o.Track.ShortDetections, o.Track.ShortScore = c.shortDet, c.shortScore
+	for _, c := range smoothCandidates {
+		o.Track.SmoothPos, o.Track.SmoothSize, o.Track.Expand = c.pos*info.FPS, c.size*info.FPS, c.expand
 		tracked, st := automask.Track(samples, frames, o.Track)
 		boxes := automask.Rects(tracked, nil)
-		miss, shown := 0, 0
+		miss := 0
 		for n, g := range gt {
 			for _, b := range g {
 				if n >= len(boxes) || !covered(b, boxes[n]) {
@@ -72,12 +70,10 @@ func facecheck(ctx context.Context, src string, start, end float64, gtScore floa
 				}
 			}
 		}
-		for _, b := range boxes {
-			shown += len(b)
-		}
-		fmt.Printf("검출 %2d회 미만은 %.2f | 놓침 %d/%d (%.2f%%) | 표시 박스 %d | 트랙 남김 %d, 버림 %d\n",
-			c.shortDet, c.shortScore, miss, total, 100*float64(miss)/float64(max(1, total)), shown, st.Kept, st.Dropped)
-		if verbose && c.shortDet == automask.DefaultTrackOptions.ShortDetections && c.shortScore == automask.DefaultTrackOptions.ShortScore {
+		acc, size := jitter(tracked)
+		fmt.Printf("부드럽게 위치 %.2f초·크기 %.2f초·확대 %.0f%% | 놓침 %d/%d (%.2f%%) | 흔들림: 중심 가속 %.2f%%, 폭 변화 %.2f%% | 트랙 %d\n",
+			c.pos, c.size, 100*c.expand, miss, total, 100*float64(miss)/float64(max(1, total)), acc, size, st.Kept)
+		if verbose && c == smoothCandidates[0] {
 			printTracks(st, info.FPS, start)
 		}
 	}
@@ -138,4 +134,40 @@ func printTracks(st automask.TrackStats, fps, start float64) {
 		fmt.Printf("  %d. %s | %.1f~%.1f초 | 검출 %d | 최고 점수 %.2f | 중심 (%.2f, %.2f) | 폭 %.3f\n", i+1, state,
 			start+float64(t.First)/fps, start+float64(t.Last)/fps, t.Detections, t.MaxScore, t.Center[0], t.Center[1], t.Width)
 	}
+}
+
+// 트랙마다 프레임 순으로 모아 중심 2차 차분과 폭 변화를 폭 대비 %로 평균한다.
+func jitter(tracked [][]automask.TrackBox) (acc, size float64) {
+	byID := map[int][]struct {
+		n int
+		r media.Rect
+	}{}
+	for n, boxes := range tracked {
+		for _, b := range boxes {
+			byID[b.ID] = append(byID[b.ID], struct {
+				n int
+				r media.Rect
+			}{n, b.Rect})
+		}
+	}
+	var sa, ss float64
+	var na, ns int
+	for _, seq := range byID {
+		for i := 1; i < len(seq); i++ {
+			a, b := seq[i-1], seq[i]
+			if b.n != a.n+1 || b.r.W == 0 {
+				continue
+			}
+			ss += math.Abs(b.r.W-a.r.W) / b.r.W
+			ns++
+			if i+1 < len(seq) && seq[i+1].n == b.n+1 {
+				c := seq[i+1]
+				ax := (c.r.X + c.r.W/2) - 2*(b.r.X+b.r.W/2) + (a.r.X + a.r.W/2)
+				ay := (c.r.Y + c.r.H/2) - 2*(b.r.Y+b.r.H/2) + (a.r.Y + a.r.H/2)
+				sa += math.Hypot(ax, ay) / b.r.W
+				na++
+			}
+		}
+	}
+	return 100 * sa / float64(max(1, na)), 100 * ss / float64(max(1, ns))
 }

@@ -2,7 +2,8 @@
 // 블러 세기는 저장 방식(ffmpeg 필터·Go 프레임)과 미리보기가 같은 규칙을 쓴다. 사각형은 BlurSigma,
 // 자동 얼굴 타원은 FaceBlurSigma다.
 // 긴 변의 20%면 얼굴 박스 안이 뭉개져 알아볼 수 없고, 작은 박스도 minBlurSigma를 지킨다.
-// 자동 얼굴(타원)은 20%가 너무 진해 이질감이 든다는 사용자 판단(2026-09-30)으로 14%(FaceBlurSigma)다.
+// 자동 얼굴(타원)은 FaceBlurSigma로 8%다. 20% → 14%(너무 진함) → 8%(사용자 판단, 2026-09-30).
+// 8%는 방송 블랙박스 영상(hx_4EDQ3ky4)의 얼굴 블러 5~7%보다 조금 진하게 잡은 값이다.
 // 필터도 frame.Blur처럼 시그마가 blurCell 안팎이 되게 줄여 흐린 뒤 키운다(속도 2배 차).
 // 줄인 작은 그림에서 gblur는 가장자리가 깨져(초록·검은 줄) frame.Blur와 같은 boxblur 3회를 쓴다.
 // 작은 yuv420p는 색 평면이 너무 작아 흐릴 때만 gbrp로 바꾼다.
@@ -23,7 +24,7 @@ const MaxRects = 5
 
 const (
 	blurShare     = 0.2
-	faceBlurShare = 0.14
+	faceBlurShare = 0.08
 	minBlurSigma  = 4
 	blurCell      = 4
 	minBlurSide   = 12

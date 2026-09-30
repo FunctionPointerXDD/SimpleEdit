@@ -3,6 +3,7 @@ package download
 import (
 	"errors"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -47,6 +48,7 @@ func TestParserTwoStreams(t *testing.T) {
 		"SEPROG 900 900",
 		"SEPROG 10 100",
 		"SEPROG 100 100",
+		"SETITLE 교차로 사고 모음 #3",
 		"SEFILE C:\\work\\source.mp4",
 	}
 	for _, l := range lines {
@@ -68,6 +70,9 @@ func TestParserTwoStreams(t *testing.T) {
 	}
 	if p.file != `C:\work\source.mp4` {
 		t.Errorf("파일 경로 = %q", p.file)
+	}
+	if p.title != "교차로 사고 모음 #3" {
+		t.Errorf("제목 = %q", p.title)
 	}
 }
 
@@ -99,5 +104,48 @@ func TestClassify(t *testing.T) {
 		if got := Classify(in); !errors.Is(got, want) || (want == nil && got != nil) {
 			t.Errorf("Classify(%q) = %v, want %v", in, got, want)
 		}
+	}
+}
+
+func TestIsTransient(t *testing.T) {
+	tests := map[string]bool{
+		"ERROR: unable to download video data: HTTP Error 403: Forbidden":                                 true,
+		"ERROR: [download] Got error: 960 bytes read, 10373139 more expected. Giving up after 10 retries": true,
+		"ERROR: [youtube] abc: Private video":                                                             false,
+		"ERROR: Unable to download webpage: <urlopen error [Errno 11001] getaddrinfo failed>":             false,
+	}
+	for in, want := range tests {
+		if got := isTransient(in); got != want {
+			t.Errorf("isTransient(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+func TestParserRetryStage(t *testing.T) {
+	var got []Progress
+	p := newParser(func(pr Progress) { got = append(got, pr) })
+	for _, l := range []string{"SEPROG 740 1000", "[download] Got error: 549 bytes read, 3911733 more expected. Retrying (1/5)..."} {
+		p.line(l)
+	}
+	last := got[len(got)-1]
+	if last.Stage != StageRetry || last.Frac < 0.7 {
+		t.Errorf("다시 받는 중 단계와 진행률 유지: %+v", last)
+	}
+}
+
+func TestParserTitleWithRetryWords(t *testing.T) {
+	var got []Progress
+	p := newParser(func(pr Progress) { got = append(got, pr) })
+	p.line("SETITLE 연수 Retrying (1/5) 편")
+	if p.title != "연수 Retrying (1/5) 편" || len(got) != 0 {
+		t.Errorf("제목 줄은 제목으로만 읽어야 함: %q %+v", p.title, got)
+	}
+}
+
+func TestArgsHeight(t *testing.T) {
+	joined := strings.Join(Args("u", "w", 720), " ")
+	if !strings.Contains(joined, "height<=720") || strings.Contains(joined, "height<=1080") ||
+		!strings.Contains(joined, "--abort-on-unavailable-fragments") {
+		t.Errorf("인자 %s", joined)
 	}
 }

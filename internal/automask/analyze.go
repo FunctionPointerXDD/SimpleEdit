@@ -27,6 +27,8 @@ const (
 	detectPerSecond = 30
 	maxGapSeconds   = 0.5
 	holdSeconds     = 0.3
+	smoothPosSec    = 0.10
+	smoothSizeSec   = 0.20
 )
 
 // 초 단위 상수에 fps를 곱해 프레임 수로 바꾼다. 최소 1프레임
@@ -35,6 +37,7 @@ func OptionsFor(fps float64) Options {
 	t := DefaultTrackOptions
 	t.MaxGap = frames(maxGapSeconds)
 	t.Hold = frames(holdSeconds)
+	t.SmoothPos, t.SmoothSize = smoothPosSec*fps, smoothSizeSec*fps
 	return Options{
 		Step:       max(1, int(math.Round(fps/detectPerSecond))),
 		DetectSize: 640,

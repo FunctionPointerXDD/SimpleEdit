@@ -1,4 +1,6 @@
 // FrameFunc는 n번째 프레임을 제자리에서 고친다. 반환 뒤 버퍼는 다시 쓰인다.
+// 분석(DecodeFrames)은 bgr24, 저장(ProcessFrames)은 yuv420p로 주고받는다. 저장 쪽은 원본·출력이
+// 모두 yuv420p라 bgr24를 거치면 색 변환만 두 번 늘어난다(2026-09-30: 1080p 60초 저장 21.5→15.0초).
 
 package media
 
@@ -39,8 +41,8 @@ func (s PipeSpec) evenSize() (int, int) {
 	return max(2, s.Width&^1), max(2, s.Height&^1)
 }
 
-// 구간을 fps 필터로 고정 fps로 만들고 짝수 크기 bgr24로 stdout에 낸다.
-func DecodeArgs(s PipeSpec) []string {
+// 구간을 fps 필터로 고정 fps로 만들고 짝수 크기 원시 프레임(format)으로 stdout에 낸다.
+func DecodeArgs(s PipeSpec, format frame.Format) []string {
 	w, h := s.evenSize()
 	return []string{
 		"-hide_banner", "-nostdin", "-loglevel", "error",
@@ -49,17 +51,17 @@ func DecodeArgs(s PipeSpec) []string {
 		"-t", secs(s.Duration),
 		"-map", "0:v:0",
 		"-vf", fmt.Sprintf("fps=%s,scale=%d:%d:flags=area", rate(s.FPS), w, h),
-		"-f", "rawvideo", "-pix_fmt", "bgr24",
+		"-f", "rawvideo", "-pix_fmt", pixFmt(format),
 		"pipe:1",
 	}
 }
 
-// stdin 원시 프레임을 H.264로 인코딩하고, 무음이 아니면 원본 구간 소리를 붙인다.
+// stdin yuv420p 원시 프레임을 H.264로 인코딩하고, 무음이 아니면 원본 구간 소리를 붙인다.
 func EncodeArgs(s PipeSpec, output string) []string {
 	w, h := s.evenSize()
 	args := []string{
 		"-hide_banner", "-nostdin", "-loglevel", "error", "-y",
-		"-f", "rawvideo", "-pix_fmt", "bgr24",
+		"-f", "rawvideo", "-pix_fmt", pixFmt(frame.YUV420),
 		"-s", fmt.Sprintf("%dx%d", w, h),
 		"-framerate", rate(s.FPS),
 		"-i", "pipe:0",
@@ -76,6 +78,13 @@ func EncodeArgs(s PipeSpec, output string) []string {
 		"-movflags", "+faststart",
 		output,
 	)
+}
+
+func pixFmt(f frame.Format) string {
+	if f == frame.YUV420 {
+		return "yuv420p"
+	}
+	return "bgr24"
 }
 
 func rate(fps float64) string { return strconv.FormatFloat(fps, 'f', 6, 64) }
@@ -106,7 +115,7 @@ func ProcessFrames(parent context.Context, s PipeSpec, output string, fn FrameFu
 	}()
 
 	total := s.FrameCount()
-	err = DecodeFrames(ctx, s, func(n int, f frame.Frame) error {
+	err = decodeFrames(ctx, s, frame.YUV420, func(n int, f frame.Frame) error {
 		if err := fn(n, f); err != nil {
 			return err
 		}
@@ -134,11 +143,16 @@ func ProcessFrames(parent context.Context, s PipeSpec, output string, fn FrameFu
 	return nil
 }
 
-// 읽기 고루틴과 버퍼 pipeBuffers개를 돌려 쓰고, fn이 실패하면 디코더를 취소한다.
+// bgr24로 decodeFrames
 func DecodeFrames(ctx context.Context, s PipeSpec, fn FrameFunc) error {
+	return decodeFrames(ctx, s, frame.BGR, fn)
+}
+
+// 읽기 고루틴과 버퍼 pipeBuffers개를 돌려 쓰고, fn이 실패하면 디코더를 취소한다.
+func decodeFrames(ctx context.Context, s PipeSpec, format frame.Format, fn FrameFunc) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	dec := tools.Command(ctx, tools.FFmpeg, DecodeArgs(s)...)
+	dec := tools.Command(ctx, tools.FFmpeg, DecodeArgs(s, format)...)
 	out, err := dec.StdoutPipe()
 	if err != nil {
 		return err
@@ -150,7 +164,11 @@ func DecodeFrames(ctx context.Context, s PipeSpec, fn FrameFunc) error {
 	w, h := s.evenSize()
 	free := make(chan frame.Frame, pipeBuffers)
 	for range pipeBuffers {
-		free <- frame.New(w, h)
+		if format == frame.YUV420 {
+			free <- frame.NewYUV(w, h)
+		} else {
+			free <- frame.New(w, h)
+		}
 	}
 	full := make(chan frame.Frame, pipeBuffers)
 	readErr := make(chan error, 1)

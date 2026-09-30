@@ -16,6 +16,9 @@ export {EVENTS};
 
 /** @param {string} url */
 export const download = (url) => App.Download(url);
+export const recentVideos = () => App.RecentVideos();
+/** @param {string} id */
+export const openRecent = (id) => App.OpenRecent(id);
 export const openLocal = () => App.OpenLocal();
 export const closeVideo = () => App.CloseVideo();
 /** @param {Plain<AnalyzeRequest>} req */

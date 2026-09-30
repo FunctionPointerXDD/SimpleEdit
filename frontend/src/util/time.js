@@ -29,3 +29,21 @@ export function formatRemaining(sec) {
 
 // 0.1초 단위로 반올림
 export const roundTenth = (sec) => Math.round(sec * 10) / 10;
+
+// now와 같은 날이면 "오늘 13:05", 전날이면 "어제 13:05", 그 밖에는 "9월 27일"
+export function formatDay(ms, now = new Date()) {
+    const d = new Date(ms);
+    const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((day(now) - day(d)) / 86400000);
+    const clock = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    if (diff === 0) return `오늘 ${clock}`;
+    if (diff === 1) return `어제 ${clock}`;
+    return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
+// 초 단위로 반올림해 "32분 5초", 1분 미만은 "45초"
+export function formatWhole(sec) {
+    const t = Math.max(0, Math.round(sec));
+    const m = Math.floor(t / 60);
+    return m > 0 ? `${m}분 ${t % 60}초` : `${t}초`;
+}
