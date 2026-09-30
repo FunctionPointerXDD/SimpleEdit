@@ -134,8 +134,26 @@ ffmpeg -y -ss <시작> -i source.mp4 -t <길이> \
 - ~~번호판·얼굴 자동 인식과 움직이는 대상 추적~~ → 9장 2차 범위로 이동
 - MP4 외 형식(AVI, GIF, MP3 추출 등) 선택
 - 설치 파일(NSIS), 바탕화면 바로가기 자동 생성, 코드 서명
-- 하드웨어 인코딩(NVENC, QSV) 자동 선택
+- 하드웨어 인코딩(NVENC, QSV, AMF) 자동 선택 — 2026-09-30 확인만 하고 보류(아래 메모)
 - macOS 지원, 다국어
+
+### 7.1 하드웨어 인코딩 확인 메모 (2026-09-30, 보류)
+
+- 번들 ffmpeg 8.1(BtbN win64 gpl)에 `h264_qsv`(인텔)·`h264_amf`(AMD)·`h264_nvenc`·`h264_mf`가 모두 들어 있어 ffmpeg 교체 없이 쓸 수 있음.
+- 개발 PC(Ryzen 5 5625U, AMD Radeon 내장) 1080p 60초 인코딩만(소리 제외) 측정:
+
+| 방식 | 시간 | 크기 | PSNR(원본 대비) |
+| --- | --- | --- | --- |
+| 현재 `libx264 -preset veryfast -crf 20` | 9.1초 | 13.6MB | 45.8dB |
+| `h264_amf` 기본(`-rc qvbr`, 사전 분석 켜짐) | 31.3초 | 9.6MB | - |
+| `h264_amf -usage transcoding -quality speed -rc cqp -qp_i 22 -qp_p 22 -preanalysis 0` | 7.3초 | 24.3MB | 47.0dB |
+| 위 + `-hwaccel d3d11va` 디코딩 | 12.5초 | 24.3MB | - |
+| `libx264 -preset superfast -crf 20` (비교) | 8.2초 | 27.6MB | - |
+| `h264_qsv` | 실패(인텔 GPU 없음, MFX 세션 -9) | | |
+| `h264_mf` | 실패(형식 협상 실패) | | |
+
+- 판단: AMD는 설정에 따라 3배 느려지기도 하고, 가장 빠른 설정도 CPU 대비 약 20% 빠른 대신 파일 1.8배. 저장 전체(Windows 13.1초)로는 약 11초 예상이라 `superfast`와 비슷한 수준이어서 보류.
+- 다시 볼 때: 강사님 PC(사무용 i5면 인텔 Quick Sync)에서 먼저 측정. 넣는다면 시도 후 실패·느림이면 `libx264`로 되돌아가는 대비책 필요(드라이버·기종마다 차이).
 
 ## 8. 테스트 계획과 완료 기준
 
