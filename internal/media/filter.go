@@ -1,6 +1,8 @@
 // Rect는 레터박스를 뺀 영상 영역 기준 0~1 좌표, PixelRect는 원본 px(짝수)다.
-// 블러 세기는 저장 방식(ffmpeg 필터·Go 프레임)과 미리보기 모두 BlurSigma 한 규칙을 쓴다.
+// 블러 세기는 저장 방식(ffmpeg 필터·Go 프레임)과 미리보기가 같은 규칙을 쓴다. 사각형은 BlurSigma,
+// 자동 얼굴 타원은 FaceBlurSigma다.
 // 긴 변의 20%면 얼굴 박스 안이 뭉개져 알아볼 수 없고, 작은 박스도 minBlurSigma를 지킨다.
+// 자동 얼굴(타원)은 20%가 너무 진해 이질감이 든다는 사용자 판단(2026-09-30)으로 14%(FaceBlurSigma)다.
 // 필터도 frame.Blur처럼 시그마가 blurCell 안팎이 되게 줄여 흐린 뒤 키운다(속도 2배 차).
 // 줄인 작은 그림에서 gblur는 가장자리가 깨져(초록·검은 줄) frame.Blur와 같은 boxblur 3회를 쓴다.
 // 작은 yuv420p는 색 평면이 너무 작아 흐릴 때만 gbrp로 바꾼다.
@@ -20,15 +22,21 @@ import (
 const MaxRects = 5
 
 const (
-	blurShare    = 0.2
-	minBlurSigma = 4
-	blurCell     = 4
-	minBlurSide  = 12
+	blurShare     = 0.2
+	faceBlurShare = 0.14
+	minBlurSigma  = 4
+	blurCell      = 4
+	minBlurSide   = 12
 )
 
 // max(minBlurSigma, 긴 변 × blurShare)를 정수 px로 반올림한다.
 func BlurSigma(w, h int) int {
 	return max(minBlurSigma, int(math.Round(float64(max(w, h))*blurShare)))
+}
+
+// BlurSigma와 같되 비율이 faceBlurShare다.
+func FaceBlurSigma(w, h int) int {
+	return max(minBlurSigma, int(math.Round(float64(max(w, h))*faceBlurShare)))
 }
 
 type Rect struct {

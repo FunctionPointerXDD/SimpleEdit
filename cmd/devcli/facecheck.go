@@ -1,11 +1,13 @@
 // facecheck: 긴 변 gtDetectSize로 모든 프레임을 검출한 결과를 유사 정답으로 삼아
 // filterCandidates(짧은 트랙 검출 수, 짧은 트랙 기준 점수)별 놓침을 비교한다. 폭 기준은 기본값
+// 덮임은 저장과 같은 타원으로 재고, 가장자리 섞임 구간은 원본이 반 넘게 남으면 덮이지 않은 것으로 본다.
 
 package main
 
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 
 	"simpleEdit/internal/automask"
@@ -16,6 +18,8 @@ import (
 )
 
 const gtDetectSize = 1280
+
+const halfBlend = 1 - frame.EllipseFeather/2
 
 var filterCandidates = []struct {
 	shortDet   int
@@ -103,7 +107,7 @@ func groundTruth(ctx context.Context, spec media.PipeSpec, det *detect.FaceDetec
 	return gt, err
 }
 
-// 기준 박스 안 9×9 점 중 80% 이상이 어느 마스크 내접 타원(저장과 같은 모양) 안에 들면 true
+// 기준 박스 안 9×9 점 중 80% 이상이 어느 마스크 타원의 반 이상 섞이는 안쪽(halfBlend)에 들면 true
 func covered(g media.Rect, masks []media.Rect) bool {
 	const n = 9
 	in := 0
@@ -112,7 +116,7 @@ func covered(g media.Rect, masks []media.Rect) bool {
 			px, py := g.X+g.W*(float64(i)+0.5)/n, g.Y+g.H*(float64(j)+0.5)/n
 			for _, m := range masks {
 				dx, dy := (px-(m.X+m.W/2))/(m.W/2), (py-(m.Y+m.H/2))/(m.H/2)
-				if dx*dx+dy*dy <= 1 {
+				if math.Hypot(dx, dy) <= halfBlend {
 					in++
 					break
 				}

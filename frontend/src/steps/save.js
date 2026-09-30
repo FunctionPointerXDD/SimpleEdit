@@ -4,6 +4,7 @@
 // 다시 저장: 바뀐 게 없으면 아무 일도 하지 않는다. 이름·폴더가 같으면 확인 창 뒤 같은 파일에 덮어쓴다.
 // 이름이나 폴더를 바꿨으면 새 파일로 저장한다. 덮어쓰기 대상 판단은 Go(exportTarget)가 다시 한다.
 // 바뀜 여부는 내용(구간·가림·소리)과 대상(이름·폴더)을 JSON으로 저장 때 값과 따로 비교한다.
+// 폴더·기본 이름을 Go에서 받기 전에는 저장 버튼을 잠가 빈 폴더로 대상이 기록되지 않게 한다.
 // 새 영상 편집하기는 저장 안 함 / 저장 후 바뀜 / 저장함 세 경우로 안내를 달리한 확인 창을 띄운다.
 
 import {h} from '../ui/dom.js';
@@ -26,7 +27,7 @@ export const saveStep = {
         const openBtn = h('button.btn.primary.big', {type: 'button', onclick: () => api.openOutputFolder()}, '저장 폴더 열기');
         const againBtn = h('button.btn.secondary.big', {type: 'button', onclick: saveAgain}, '다시 저장하기');
         const newBtn = h('button.btn.secondary.big', {type: 'button', onclick: startOver}, '새 영상 편집하기');
-        const folderText = h('span.folder-path', {}, '…');
+        const folderText = h('span.folder-path', {}, state.outputFolder || '…');
         const folderBtn = h('button.btn.secondary.small', {type: 'button', onclick: chooseFolder}, '저장 위치 바꾸기');
         const nameInput = h('input.name-input', {
             type: 'text', spellcheck: false, 'aria-label': '파일 이름',
@@ -61,16 +62,17 @@ export const saveStep = {
 
         async function fillDefaults() {
             const [dir, name] = await Promise.all([api.outputFolder(), api.defaultFileName()]);
-            folder = folderText.textContent = dir;
+            state.outputFolder = folderText.textContent = dir;
             if (!state.fileName) state.fileName = name;
             nameInput.value = state.fileName;
+            ready = true;
             render();
         }
 
         async function chooseFolder() {
             folderBtn.disabled = true;
             try {
-                folder = folderText.textContent = await api.chooseOutputFolder();
+                state.outputFolder = folderText.textContent = await api.chooseOutputFolder();
             } finally {
                 folderBtn.disabled = false;
                 render();
@@ -84,8 +86,8 @@ export const saveStep = {
             };
         }
 
-        let folder = '';
-        const target = () => JSON.stringify([state.fileName, folder]);
+        let ready = false;
+        const target = () => JSON.stringify([state.fileName, state.outputFolder]);
         const sameTarget = () => !!state.savedPath && state.savedTarget === target();
         const contentChanged = () => !!state.savedPath && JSON.stringify(content()) !== state.savedRequest;
         const changedSinceSave = () => !!state.savedPath && (!sameTarget() || contentChanged());
@@ -95,6 +97,7 @@ export const saveStep = {
             saveBtn.hidden = saved;
             openBtn.hidden = againBtn.hidden = !saved;
             for (const b of [saveBtn, openBtn, againBtn, newBtn]) b.disabled = busy;
+            saveBtn.disabled = againBtn.disabled = busy || !ready;
             againBtn.classList.toggle('primary', changedSinceSave());
             againBtn.classList.toggle('secondary', !changedSinceSave());
             done.hidden = !saved || busy;

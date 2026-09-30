@@ -2,7 +2,7 @@
 // 타입은 Wails가 Go에서 만든 wailsjs/go/models.ts를 가리키고 QA의 tsc가 검사한다.
 // rects·AutoBox 좌표는 레터박스를 뺀 영상 영역 기준 0~1 비율, 시각은 초다.
 // savedPath는 마지막 저장 파일, savedRequest는 그때 내용(구간·가림·소리) JSON,
-// savedTarget은 그때 [이름, 폴더] JSON이다.
+// savedTarget은 그때 [이름, 폴더] JSON이다. outputFolder는 Go가 알려 준 현재 저장 폴더다.
 
 import {closeVideo} from './media/videoSource.js';
 
@@ -29,6 +29,7 @@ import {closeVideo} from './media/videoSource.js';
  * @property {string} savedPath
  * @property {string} savedRequest
  * @property {string} savedTarget
+ * @property {string} outputFolder
  */
 
 /**
@@ -54,6 +55,7 @@ export const state = {
     savedPath: '',
     savedRequest: '',
     savedTarget: '',
+    outputFolder: '',
 };
 
 export const MAX_RECTS = 5;

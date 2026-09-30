@@ -279,7 +279,7 @@ func (g *gen) typeName(p *pkg, e ast.Expr) string {
 	case *ast.MapType:
 		return "Record<" + g.typeName(p, t.Key) + ", " + g.typeName(p, t.Value) + ">"
 	}
-	panic(fmt.Sprintf("명세로 옮기지 못하는 타입: %s", exprString(e)))
+	panic(fmt.Sprintf("명세로 옮기지 못하는 타입: %T", e))
 }
 
 // json 태그가 있는 필드만 싣는다. 태그가 "-"면 뺀다.
@@ -378,12 +378,6 @@ func reflectTag(tag, key string) string {
 		}
 	}
 	return ""
-}
-
-func exprString(e ast.Expr) string {
-	var b bytes.Buffer
-	fmt.Fprintf(&b, "%T", e)
-	return b.String()
 }
 
 // 이벤트는 ev를 뗀 소문자 키, 안내 문장은 상수 이름, 타입은 JSDoc typedef로 싣는다.

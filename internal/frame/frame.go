@@ -1,7 +1,8 @@
 // Frame.Pix는 bgr24이고 len(Pix) = W*H*3이다.
 // Blur의 상자 평균 3회는 가우시안에 가깝고, 시그마는 대략 radius다.
 // 반지름을 blurCell 안팎이 되게 사각형을 줄여 흐린 뒤 키운다. 모양은 같고 계산은 작다.
-// BlurEllipse는 사각형 전체를 흐린 뒤 그 안에 꼭 맞는 타원 안쪽만 쓴다. 경계 1px은 섞어 계단을 없앤다.
+// BlurEllipse는 사각형 전체를 흐린 뒤 그 안에 꼭 맞는 타원 안쪽만 쓴다.
+// 타원 반지름의 바깥 EllipseFeather 비율 구간은 smoothstep으로 원본과 섞어 주변과 이어지게 한다.
 
 // Package frame은 bgr24 프레임과 블러를 다룬다.
 package frame
@@ -36,6 +37,8 @@ func FromImage(img image.Image) Frame {
 }
 
 const blurCell = 4
+
+const EllipseFeather = 0.25
 
 // 사각형 안 전체를 흐린다.
 func (f Frame) Blur(r image.Rectangle, radius int) { f.blur(r, radius, false) }
@@ -95,18 +98,17 @@ func (f Frame) blur(shape image.Rectangle, radius int, ellipse bool) {
 	}
 }
 
-// 픽셀 중심이 shape 내접 타원 경계에서 안쪽으로 몇 px인지 재어 +0.5를 0~1로 자른 값
+// 정규화 반지름 q로 (1-q)/EllipseFeather를 0~1로 자른 뒤 smoothstep. 안쪽은 1, 경계는 0
 func ellipseWeights(shape, r image.Rectangle) []float32 {
 	cx, cy := float64(shape.Min.X+shape.Max.X)/2, float64(shape.Min.Y+shape.Max.Y)/2
 	ax, ay := float64(shape.Dx())/2, float64(shape.Dy())/2
-	scale := math.Min(ax, ay)
 	out := make([]float32, r.Dx()*r.Dy())
 	for y := 0; y < r.Dy(); y++ {
 		ny := (float64(r.Min.Y+y) + 0.5 - cy) / ay
 		for x := 0; x < r.Dx(); x++ {
 			nx := (float64(r.Min.X+x) + 0.5 - cx) / ax
-			inside := (1 - math.Hypot(nx, ny)) * scale
-			out[y*r.Dx()+x] = float32(math.Max(0, math.Min(1, inside+0.5)))
+			t := math.Max(0, math.Min(1, (1-math.Hypot(nx, ny))/EllipseFeather))
+			out[y*r.Dx()+x] = float32(t * t * (3 - 2*t))
 		}
 	}
 	return out

@@ -120,14 +120,14 @@ func BlurFunc(manual []media.Rect, auto [][]media.Rect) media.FrameFunc {
 	}
 }
 
-// 비율 좌표를 바깥쪽으로 반올림해 픽셀로 바꾼 뒤 media.BlurSigma 세기로 흐린다. ellipse면 내접 타원만
+// 비율 좌표를 픽셀로 바꿔 흐린다. ellipse면 내접 타원을 FaceBlurSigma로, 아니면 BlurSigma로
 func blur(f frame.Frame, r media.Rect, ellipse bool) {
 	px := image.Rect(
 		int(math.Floor(r.X*float64(f.W))), int(math.Floor(r.Y*float64(f.H))),
 		int(math.Ceil((r.X+r.W)*float64(f.W))), int(math.Ceil((r.Y+r.H)*float64(f.H))),
 	)
 	if ellipse {
-		f.BlurEllipse(px, media.BlurSigma(px.Dx(), px.Dy()))
+		f.BlurEllipse(px, media.FaceBlurSigma(px.Dx(), px.Dy()))
 		return
 	}
 	f.Blur(px, media.BlurSigma(px.Dx(), px.Dy()))

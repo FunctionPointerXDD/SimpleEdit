@@ -1,12 +1,15 @@
 // MIN_DRAG_PX보다 작게 끈 것은 클릭으로 보고, 그 자리의 자동 박스를 빼거나 되살린다.
-// 가림 표시는 영상 프레임을 media.BlurSigma와 같은 세기(긴 변 20%)로 흐려 그린다.
+// 가림 표시는 영상 프레임을 저장과 같은 세기로 흐려 그린다. 사각형은 media.BlurSigma(긴 변 20%)다.
 // 자동 얼굴은 저장(frame.BlurEllipse)과 같게 박스에 내접한 타원, 직접 그린 곳은 사각형이다.
+// 타원은 media.FaceBlurSigma(14%) 세기로, 바깥 ELLIPSE_FEATHER 구간을 smoothstep으로 원본과 섞는다.
 // 직접 가림이 꽉 차도 누른 자리에 자동 박스가 있으면 뺄 수 있다. 겹치면 가장 작은 박스를 고른다.
 
 import {h} from '../ui/dom.js';
 
 const MIN_DRAG_PX = 8;
 const BLUR_SHARE = 0.2;
+const FACE_BLUR_SHARE = 0.14;
+const ELLIPSE_FEATHER = 0.25;
 const MIN_BLUR_SIGMA = 4;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
@@ -28,6 +31,8 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
     const on = (target, type, fn) => target.addEventListener(type, fn, {signal: off.signal});
     const canvas = h('canvas.mask-canvas');
     const ctx2d = canvas.getContext('2d');
+    const scratch = document.createElement('canvas');
+    const scratchCtx = scratch.getContext('2d');
     let drag = null;
     let raf = 0;
 
@@ -144,25 +149,55 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
     function drawBlurHint(box, r, x, y, w, hh, ellipse) {
         const vw = video.videoWidth;
         const vh = video.videoHeight;
-        ctx2d.save();
-        shapePath(x, y, w, hh, ellipse);
-        ctx2d.clip();
         if (!vw || !vh || video.readyState < 2) {
+            ctx2d.save();
+            shapePath(x, y, w, hh, ellipse);
             ctx2d.fillStyle = 'rgba(128,128,128,0.8)';
-            ctx2d.fillRect(x, y, w, hh);
+            ctx2d.fill();
             ctx2d.restore();
             return;
         }
         const scale = box.w / vw;
-        const sigma = Math.max(MIN_BLUR_SIGMA * scale, Math.max(w, hh) * BLUR_SHARE);
+        const share = ellipse ? FACE_BLUR_SHARE : BLUR_SHARE;
+        const sigma = Math.max(MIN_BLUR_SIGMA * scale, Math.max(w, hh) * share);
         const pad = (sigma * 2) / scale;
         const sx = Math.max(0, r.x * vw - pad);
         const sy = Math.max(0, r.y * vh - pad);
         const sw = Math.min(vw, (r.x + r.w) * vw + pad) - sx;
         const sh = Math.min(vh, (r.y + r.h) * vh + pad) - sy;
-        ctx2d.filter = `blur(${sigma}px)`;
-        ctx2d.drawImage(video, sx, sy, sw, sh, box.x + sx * scale, box.y + sy * scale, sw * scale, sh * scale);
-        ctx2d.restore();
+        const dest = [box.x + sx * scale, box.y + sy * scale, sw * scale, sh * scale];
+        if (!ellipse) {
+            ctx2d.save();
+            shapePath(x, y, w, hh, false);
+            ctx2d.clip();
+            ctx2d.filter = `blur(${sigma}px)`;
+            ctx2d.drawImage(video, sx, sy, sw, sh, ...dest);
+            ctx2d.restore();
+            return;
+        }
+        const dpr = window.devicePixelRatio || 1;
+        scratch.width = Math.max(1, Math.ceil(w * dpr));
+        scratch.height = Math.max(1, Math.ceil(hh * dpr));
+        scratchCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        scratchCtx.filter = `blur(${sigma}px)`;
+        scratchCtx.drawImage(video, sx, sy, sw, sh, dest[0] - x, dest[1] - y, dest[2], dest[3]);
+        scratchCtx.filter = 'none';
+        scratchCtx.globalCompositeOperation = 'destination-in';
+        scratchCtx.translate(w / 2, hh / 2);
+        scratchCtx.scale(1, hh / Math.max(w, 1));
+        const g = scratchCtx.createRadialGradient(0, 0, 0, 0, 0, w / 2);
+        for (let i = 0; i <= 8; i++) {
+            const q = 1 - ELLIPSE_FEATHER + (ELLIPSE_FEATHER * i) / 8;
+            const t = (1 - q) / ELLIPSE_FEATHER;
+            g.addColorStop(q, `rgba(0,0,0,${t * t * (3 - 2 * t)})`);
+        }
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        scratchCtx.fillStyle = g;
+        scratchCtx.beginPath();
+        scratchCtx.arc(0, 0, w / 2, 0, Math.PI * 2);
+        scratchCtx.fill();
+        scratchCtx.globalCompositeOperation = 'source-over';
+        ctx2d.drawImage(scratch, x, y, w, hh);
     }
 
     function drawBadge(x, y, text) {

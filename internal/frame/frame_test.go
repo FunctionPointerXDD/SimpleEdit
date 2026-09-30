@@ -125,3 +125,18 @@ func TestBlurEllipseKeepsCorners(t *testing.T) {
 		}
 	}
 }
+
+func TestEllipseWeightsFeather(t *testing.T) {
+	r := image.Rect(0, 0, 100, 100)
+	w := ellipseWeights(r, r)
+	at := func(x, y int) float32 { return w[y*100+x] }
+	if at(50, 50) != 1 || at(50, 20) != 1 {
+		t.Errorf("안쪽(반지름 75%% 이내)은 1이어야 함: %v %v", at(50, 50), at(50, 20))
+	}
+	if v := at(50, 6); v <= 0 || v >= 1 {
+		t.Errorf("섞임 구간(반지름 약 88%%)은 0과 1 사이여야 함: %v", v)
+	}
+	if at(0, 0) != 0 || at(50, 0) >= at(50, 6) {
+		t.Errorf("바깥으로 갈수록 줄어 경계 밖은 0: %v %v %v", at(0, 0), at(50, 0), at(50, 6))
+	}
+}
