@@ -1,6 +1,8 @@
 // state는 단계 사이에 공유하는 편집 상태다. auto[kind] = {result, enabled, excluded}
 // 타입은 Wails가 Go에서 만든 wailsjs/go/models.ts를 가리키고 QA의 tsc가 검사한다.
 // rects·AutoBox 좌표는 레터박스를 뺀 영상 영역 기준 0~1 비율, 시각은 초다.
+// rects[i].from·to는 직접 가림을 켤 원본 기준 시각이고, null이면 자른 구간의 시작·끝을 따른다.
+// 그래서 구간을 다시 잘라도 "항상 가리기" 가림은 새 구간 전체를 가린다.
 // savedPath는 마지막 저장 파일, savedRequest는 그때 내용(구간·가림·소리) JSON,
 // savedTarget은 그때 [이름, 폴더] JSON이다. outputFolder는 Go가 알려 준 현재 저장 폴더다.
 
@@ -8,7 +10,17 @@ import {closeVideo} from './media/videoSource.js';
 
 /** @typedef {import('../wailsjs/go/models').main.VideoInfo} VideoInfo */
 /** @typedef {import('../wailsjs/go/models').main.AutoMask} AutoMask */
-/** @typedef {import('../wailsjs/go/models').media.Rect} Rect */
+/** @typedef {import('../wailsjs/go/models').media.MaskRect} MaskRect */
+
+/**
+ * @typedef {Object} ManualRect
+ * @property {number} x
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ * @property {number | null} from
+ * @property {number | null} to
+ */
 
 /**
  * @typedef {Object} AutoState
@@ -22,7 +34,7 @@ import {closeVideo} from './media/videoSource.js';
  * @property {VideoInfo | null} video
  * @property {number} start
  * @property {number} end
- * @property {Rect[]} rects
+ * @property {ManualRect[]} rects
  * @property {Record<string, AutoState>} auto
  * @property {boolean} mute
  * @property {string} fileName
@@ -58,7 +70,7 @@ export const state = {
     outputFolder: '',
 };
 
-export const MAX_RECTS = 5;
+export const MAX_RECTS = 10;
 export const MIN_CLIP_SECONDS = 1;
 
 // 다른 url이면 이전 영상을 닫고, 구간은 전체(0.1초 내림)로 두고 나머지는 비운다.
@@ -169,4 +181,34 @@ export function checkRange() {
         return {ok: false, message: '자를 구간이 너무 짧습니다. 시작과 끝을 1초 이상 떨어지게 정해 주세요.'};
     }
     return {ok: true, message: ''};
+}
+
+// from·to가 비면 자른 구간 끝으로 채우고 구간 안으로 자른다. 남는 시간이 없으면 null
+/**
+ * @param {ManualRect} r
+ * @returns {[number, number] | null}
+ */
+export function rectSpan(r) {
+    const a = Math.max(state.start, r.from ?? state.start);
+    const b = Math.min(state.end, r.to ?? state.end);
+    return b > a ? [a, b] : null;
+}
+
+// rectSpan 안이면 true. 끝 시각 프레임은 빼려고 1ms 앞당겨 비교한다.
+/**
+ * @param {ManualRect} r
+ * @param {number} t
+ */
+export function rectActiveAt(r, t) {
+    const span = rectSpan(r);
+    return !!span && t >= span[0] - 1e-3 && t < span[1] - 1e-3;
+}
+
+// 구간 안에 남는 사각형만 rectSpan 시각을 붙여 저장 요청 형태로 바꾼다.
+/** @returns {MaskRect[]} */
+export function rectsForExport() {
+    return state.rects.flatMap((r) => {
+        const span = rectSpan(r);
+        return span ? [{x: r.x, y: r.y, w: r.w, h: r.h, start: span[0], end: span[1]}] : [];
+    });
 }

@@ -1,4 +1,6 @@
-// ExportRequest.Rects는 레터박스를 뺀 영상 영역 기준 0~1 비율 좌표다.
+// ExportRequest.Rects는 레터박스를 뺀 영상 영역 기준 0~1 비율 좌표와 원본 기준 켜는 시각(초)이다.
+// 시각은 저장 구간으로 자르고 프레임 번호(round(초×fps))로 바꾼다. 가림이 있으면 Go 파이프로 저장한다.
+// End ≤ Start면 구간 전체로 본다(잘못 와도 덜 가리는 쪽으로 틀리지 않게).
 // ProgressEvent.Remaining은 남은 초이고, 아직 모르면 -1이다.
 // 유튜브 영상 이름은 yt-dlp가 알려 준 제목, 없으면 youtubeName이다. 받은 원본은 7일 보관(appdir.KeepDays).
 // VideoInfo.Lowered는 1080p를 못 받아 720p로 받았다는 뜻이다.
@@ -70,7 +72,7 @@ type RecentVideo struct {
 type ExportRequest struct {
 	Start     float64          `json:"start"`
 	End       float64          `json:"end"`
-	Rects     []media.Rect     `json:"rects"`
+	Rects     []media.MaskRect `json:"rects"`
 	FileName  string           `json:"fileName"`
 	Auto      []string         `json:"auto"`
 	Mute      bool             `json:"mute"`
@@ -411,19 +413,19 @@ func (a *App) Export(req ExportRequest) (string, error) {
 		write = savingPath(out)
 		os.Remove(write)
 	}
-	rects := media.RectsToPixels(req.Rects, info.Width, info.Height)
-	applog.Printf("저장: %.2f~%.2f초, 사각형 %v, 자동 %v, 무음 %v, 덮어쓰기 %v → %s", start, end, rects, req.Auto, req.Mute, replace, out)
+	manual := manualRects(req.Rects, start, end, info.FPS)
+	applog.Printf("저장: %.2f~%.2f초, 사각형 %+v, 자동 %v, 무음 %v, 덮어쓰기 %v → %s", start, end, manual, req.Auto, req.Mute, replace, out)
 
 	emit := a.progressEmitter(evExportProgress)
 	emit(0, "export")
 	progress := func(f float64) { emit(f, "export") }
-	if auto != nil {
+	if auto != nil || len(manual) > 0 {
 		spec := pipeSpec(source, info, start, end)
 		spec.Mute = req.Mute
-		err = media.ProcessFrames(ctx, spec, write, automask.BlurFunc(req.Rects, auto), progress)
+		err = media.ProcessFrames(ctx, spec, write, automask.BlurFunc(manual, auto), progress)
 	} else {
 		err = media.Export(ctx, media.ExportSpec{
-			Source: source, Output: write, Start: start, Duration: end - start, Rects: rects, Mute: req.Mute,
+			Source: source, Output: write, Start: start, Duration: end - start, Mute: req.Mute,
 		}, progress)
 	}
 	if err != nil {
@@ -507,4 +509,21 @@ func (a *App) progressEmitter(name string) func(frac float64, stage string) {
 			Stage:     stage,
 		})
 	}
+}
+
+// 켜는 시각을 저장 구간 프레임 [First, End)로 바꾼다. 구간 밖으로 남는 시간이 없으면 뺀다.
+func manualRects(rs []media.MaskRect, start, end, fps float64) []automask.ManualRect {
+	total := automask.FrameAt(end-start, fps)
+	var manual []automask.ManualRect
+	for _, r := range rs {
+		first, last := 0, total
+		if r.End > r.Start {
+			first = max(0, automask.FrameAt(r.Start-start, fps))
+			last = min(total, automask.FrameAt(r.End-start, fps))
+		}
+		if last > first {
+			manual = append(manual, automask.ManualRect{Rect: r.Box(), First: first, End: last})
+		}
+	}
+	return manual
 }

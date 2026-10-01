@@ -127,12 +127,22 @@ const seekTo = (t) => page.$eval('input.seek', (el, v) => {
     el.dispatchEvent(new Event('input'));
     el.dispatchEvent(new Event('change'));
 }, t);
-const orangeCount = () => page.$eval('.mask-canvas', (c) => {
+// 직접 가림 두 곳(흐린 빨강·노랑이 주황으로 보일 수 있음)은 빼고 센다. box는 3단계에서 정해짐
+const MANUAL_AREAS = [[0.08, 0.18, 0.42, 0.52], [0.58, 0.68, 0.92, 0.92]];
+const orangeCount = () => page.$eval('.mask-canvas', (c, a) => {
+    const r = c.getBoundingClientRect();
+    const k = c.width / r.width;
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     let n = 0;
-    for (let i = 0; i < d.length; i += 4) if (d[i] > 240 && d[i + 1] > 130 && d[i + 1] < 170 && d[i + 2] < 30) n++;
+    for (let i = 0; i < d.length; i += 4) {
+        if (!(d[i] > 240 && d[i + 1] > 130 && d[i + 1] < 170 && d[i + 2] < 30)) continue;
+        const p = i / 4;
+        const fx = ((p % c.width) / k + r.left - a.b.x) / a.b.w;
+        const fy = (Math.floor(p / c.width) / k + r.top - a.b.y) / a.b.h;
+        if (!a.areas.some(([x0, y0, x1, y1]) => fx >= x0 && fx <= x1 && fy >= y0 && fy <= y1)) n++;
+    }
     return n;
-});
+}, {b: box, areas: MANUAL_AREAS});
 
 // 1단계
 await page.goto(base);
@@ -235,10 +245,46 @@ await drag(0.1, 0.2, 0.4, 0.5);
 await drag(0.9, 0.9, 0.6, 0.7);
 await drag(0.5, 0.5, 0.505, 0.505);
 check('사각형 2개 목록', (await page.$$('.rect-list li:not(.empty)')).length === 2);
-for (let i = 0; i < 4; i++) await drag(0.02 + i * 0.12, 0.02, 0.12 + i * 0.12, 0.12);
-check('최대 5개 제한 안내', (await page.textContent('.guide-line')).includes('5개'));
-for (let i = 0; i < 3; i++) await page.getByRole('button', {name: '지우기'}).last().click();
+for (let i = 0; i < 9; i++) await drag(0.02 + (i % 5) * 0.12, 0.02 + Math.floor(i / 5) * 0.14, 0.12 + (i % 5) * 0.12, 0.12 + Math.floor(i / 5) * 0.14);
+check('최대 10개 제한 안내', (await page.textContent('.guide-line')).includes('10개'));
+for (let i = 0; i < 8; i++) await page.getByRole('button', {name: '지우기'}).first().click();
 check('지우기 후 2개', (await page.$$('.rect-list li:not(.empty)')).length === 2);
+
+// 직접 가림 시간: 1번을 5~8초만
+const item = (i) => page.locator('.rect-list li.rect-item').nth(i);
+check('목록은 최근 것이 위', (await item(0).locator('.badge').textContent()) === '2');
+check('처음엔 항상 가림, 버튼은 바로 보임(눌린 상태)', (await item(0).textContent()).includes('항상 가림') && await item(0).getByRole('button', {name: '항상 가리기'}).isDisabled());
+await seekTo(5);
+await item(0).getByRole('button', {name: '여기서부터'}).click();
+await seekTo(8);
+await item(0).getByRole('button', {name: '여기까지'}).click();
+check('2번(맨 위) 시간 표시', (await item(0).textContent()).includes('00:05.0 ~ 00:08.0'), await item(0).textContent());
+check('재생 막대 띠 1개', (await page.$$('.rect-span')).length === 1);
+await seekTo(9);
+await item(0).getByRole('button', {name: '여기서부터'}).click();
+check('끝보다 뒤에서 여기서부터 → 안내', (await page.textContent('.guide-line')).includes('앞에서 눌러'));
+check('잘못 눌러도 시간 그대로', (await item(0).textContent()).includes('00:05.0 ~ 00:08.0'));
+await item(1).getByRole('button', {name: '여기까지'}).click();
+check('시간을 줄이면 항상 가리기 버튼 켜짐', await item(1).getByRole('button', {name: '항상 가리기'}).isEnabled());
+await item(1).getByRole('button', {name: '항상 가리기'}).click();
+check('항상 가리기로 되돌림', (await item(1).textContent()).includes('항상 가림') && (await page.$$('.rect-span')).length === 1);
+const redIn = (fx0, fy0, fx1, fy1) => page.$eval('.mask-canvas', (c, a) => {
+    const r = c.getBoundingClientRect();
+    const k = c.width / r.width;
+    const x0 = Math.round((a.b.x + a.b.w * a.fx0 - r.left) * k), y0 = Math.round((a.b.y + a.b.h * a.fy0 - r.top) * k);
+    const x1 = Math.round((a.b.x + a.b.w * a.fx1 - r.left) * k), y1 = Math.round((a.b.y + a.b.h * a.fy1 - r.top) * k);
+    const d = c.getContext('2d').getImageData(x0, y0, x1 - x0, y1 - y0).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] > 230 && d[i + 1] < 90 && d[i + 2] < 80 && d[i + 3] > 200) n++;
+    return n;
+}, {b: box, fx0, fy0, fx1, fy1});
+await page.waitForTimeout(100);
+check('9초: 항상 가림(1번)은 보임', (await redIn(0.08, 0.18, 0.42, 0.52)) > 50);
+check('9초: 5~8초 가림(2번)은 안 보임', (await redIn(0.58, 0.68, 0.92, 0.92)) === 0);
+await seekTo(6);
+await page.waitForTimeout(100);
+check('6초: 2번도 보임', (await redIn(0.58, 0.68, 0.92, 0.92)) > 50);
+await shot('3-rect-time');
 
 // 3단계: 자동 가리기
 check('자동 전에는 주황 박스 없음', (await orangeCount()) === 0);
@@ -271,12 +317,12 @@ check('다시 누르면 되살아남', (await orangeCount()) > 100);
 await clickAt(0.45, 0.35);
 
 // 직접 가림이 꽉 차도 주황 박스는 뺄 수 있어야 함
-for (const fy of [0.05, 0.12, 0.19]) await drag(0.02, fy, 0.08, fy + 0.05);
-check('직접 가림 5개', (await page.$$('.rect-list li:not(.empty)')).length === 5);
+for (let i = 0; i < 8; i++) await drag(0.02, 0.03 + i * 0.07, 0.08, 0.08 + i * 0.07);
+check('직접 가림 10개', (await page.$$('.rect-list li:not(.empty)')).length === 10);
 await clickAt(0.45, 0.35);
 check('꽉 차도 주황 박스 빼기', (await page.textContent('.guide-line')).includes('자동 가림'));
 await clickAt(0.45, 0.35);
-for (let i = 0; i < 3; i++) await page.locator('.rect-list li button').last().click();
+for (let i = 0; i < 8; i++) await page.getByRole('button', {name: '지우기'}).first().click();
 check('직접 가림 2개로 되돌림', (await page.$$('.rect-list li:not(.empty)')).length === 2);
 
 // 3단계: 소리 없애기
@@ -324,6 +370,8 @@ check('저장 요청 구간', req.start === 3 && req.end === 13.5);
 check('사각형 1 비율', near(req.rects[0].x, 0.1) && near(req.rects[0].y, 0.2) && near(req.rects[0].w, 0.3) && near(req.rects[0].h, 0.3), JSON.stringify(req.rects[0]));
 check('사각형 2 비율(역방향 드래그)', near(req.rects[1].x, 0.6) && near(req.rects[1].y, 0.7) && near(req.rects[1].w, 0.3) && near(req.rects[1].h, 0.2), JSON.stringify(req.rects[1]));
 check('사각형 개수', req.rects.length === 2);
+check('사각형 2 시간 5~8초', req.rects[1].start === 5 && req.rects[1].end === 8, JSON.stringify(req.rects[1]));
+check('사각형 1 시간은 구간 전체', req.rects[0].start === 3 && req.rects[0].end === 13.5, JSON.stringify(req.rects[0]));
 check('완료 안내에 폴더·이름', (await page.textContent('.done-card')).includes('D:\\강의영상') &&
     (await page.textContent('.done-card')).includes('교차로 사고 영상.mp4'));
 check('처음 저장은 덮어쓰기 아님', req.overwrite === false, String(req.overwrite));
@@ -422,6 +470,35 @@ await page.focus('.name-input');
 await page.keyboard.press('Enter');
 await page.waitForTimeout(300);
 check('완료 뒤 Enter로 중복 저장 안 함', await page.evaluate(() => window.__mock.exportReq === null));
+
+// 구간을 다시 잘라 직접 가림(2번, 5~8초)이 구간 밖이 되면, 누른 쪽만 새로 정해 되살릴 수 있어야 함
+await click('◀ 이전');
+await click('◀ 이전');
+await videoReady();
+await seekTo(9);
+await page.waitForTimeout(200);
+await click('여기서 시작');
+await click('다음 ▶');
+await page.waitForTimeout(300);
+check('구간 밖 가림 안내', (await item(0).textContent()).includes('자른 구간 밖'));
+await seekTo(10);
+await item(0).getByRole('button', {name: '여기서부터'}).click();
+check('구간 밖 가림도 여기서부터로 되살림', (await item(0).textContent()).includes('00:10.0 ~ 00:13.5'), await item(0).textContent());
+await click('◀ 이전');
+await videoReady();
+await seekTo(1);
+await page.waitForTimeout(200);
+await click('여기서 시작');
+await click('다음 ▶');
+await page.waitForTimeout(300);
+await seekTo(5);
+await item(0).getByRole('button', {name: '여기서부터'}).click();
+await seekTo(8);
+await item(0).getByRole('button', {name: '여기까지'}).click();
+check('2번 가림 5~8초로 되돌림', (await item(0).textContent()).includes('00:05.0 ~ 00:08.0'));
+await click('다음 ▶');
+await page.waitForSelector('.name-input');
+await page.waitForTimeout(200);
 
 // 새 영상 편집하기: 확인 창에서 계속 편집하기 → 그대로, 새 영상 편집하기 → 처음으로
 await click('새 영상 편집하기');

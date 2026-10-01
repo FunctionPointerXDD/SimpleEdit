@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"simpleEdit/internal/media"
 )
 
 func TestExportTargetOverwritesOnlyLastSave(t *testing.T) {
@@ -39,5 +41,26 @@ func TestExportTargetOverwritesOnlyLastSave(t *testing.T) {
 func TestSavingPath(t *testing.T) {
 	if got := savingPath(filepath.Join("d", "강의.mp4")); got != filepath.Join("d", "강의.saving.mp4") {
 		t.Errorf("임시 경로 %s", got)
+	}
+}
+
+func TestManualRectsFrames(t *testing.T) {
+	box := media.MaskRect{X: 0.1, Y: 0.1, W: 0.2, H: 0.2}
+	whole, part, outside, unset := box, box, box, box
+	whole.Start, whole.End = 10, 20
+	part.Start, part.End = 12, 13.5
+	outside.Start, outside.End = 21, 25
+	manual := manualRects([]media.MaskRect{whole, part, outside, unset}, 10, 20, 30)
+	if len(manual) != 3 {
+		t.Fatalf("구간 밖 사각형만 빠져야 함: %d", len(manual))
+	}
+	if m := manual[0]; m.First != 0 || m.End != 300 {
+		t.Errorf("구간 전체: %+v", m)
+	}
+	if m := manual[1]; m.First != 60 || m.End != 105 {
+		t.Errorf("2~3.5초 → 60~105번 프레임: %+v", m)
+	}
+	if m := manual[2]; m.First != 0 || m.End != 300 {
+		t.Errorf("시각이 없으면 구간 전체: %+v", m)
 	}
 }

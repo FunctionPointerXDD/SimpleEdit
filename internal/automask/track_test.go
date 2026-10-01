@@ -22,7 +22,7 @@ func withScore(score float32, rs ...media.Rect) []Det {
 }
 
 func trackRects(samples []Sample, frames int, o TrackOptions) ([][]media.Rect, TrackStats) {
-	boxes, st := Track(samples, frames, o)
+	boxes, st := Track(samples, nil, frames, o)
 	return Rects(boxes, nil), st
 }
 
@@ -163,7 +163,7 @@ func TestRectsExcludesTrack(t *testing.T) {
 		{Frame: 0, Dets: strong(rect(0.1, 0.1, 0.1, 0.1), rect(0.7, 0.1, 0.1, 0.1))},
 		{Frame: 1, Dets: strong(rect(0.1, 0.1, 0.1, 0.1), rect(0.7, 0.1, 0.1, 0.1))},
 	}
-	boxes, _ := Track(samples, 2, noExpand)
+	boxes, _ := Track(samples, nil, 2, noExpand)
 	ids := map[int]bool{}
 	for _, b := range boxes[0] {
 		ids[b.ID] = true
@@ -193,7 +193,7 @@ func TestTrackShortNeedsHighScore(t *testing.T) {
 		}
 		samples = append(samples, Sample{Frame: n, Dets: dets})
 	}
-	_, st := Track(samples, 12, o)
+	_, st := Track(samples, nil, 12, o)
 	if st.Kept != 2 || st.Dropped != 1 {
 		t.Fatalf("긴 트랙과 점수 높은 짧은 트랙만 남아야 함: %+v", st)
 	}
@@ -226,5 +226,39 @@ func TestSmoothKeepsMotionRemovesJitter(t *testing.T) {
 	}
 	if got := smooth(line, 0, 0); &got[0] != &line[0] {
 		t.Error("시그마 0이면 그대로 돌려줘야 함")
+	}
+}
+
+func TestTrackStopsAtSceneCut(t *testing.T) {
+	var samples []Sample
+	for n := 0; n < 10; n += 2 {
+		samples = append(samples, Sample{Frame: n, Dets: strong(rect(0.4, 0.4, 0.1, 0.1))})
+	}
+	for n := 10; n < 20; n += 2 {
+		samples = append(samples, Sample{Frame: n, Dets: strong(rect(0.41, 0.4, 0.1, 0.1))})
+	}
+	o := noExpand
+	o.Hold = 5
+	boxes, st := Track(samples, []int{10}, 25, o)
+	if st.Kept != 2 {
+		t.Fatalf("컷 앞뒤는 다른 트랙이어야 함: %d", st.Kept)
+	}
+	for n := 9; n <= 10; n++ {
+		if len(boxes[n]) != 1 {
+			t.Errorf("컷 경계 %d번 프레임에 박스 %d개(앞 장면 Hold·뒤 장면 Hold가 넘어오면 안 됨)", n, len(boxes[n]))
+		}
+	}
+	if boxes[9][0].ID == boxes[10][0].ID {
+		t.Error("컷 앞뒤 박스 ID가 같음")
+	}
+	if len(boxes[23]) != 1 || len(boxes[24]) != 0 {
+		t.Error("컷이 없는 끝 쪽은 Hold만큼 남아야 함")
+	}
+}
+
+func TestExpandLiftsUp(t *testing.T) {
+	got := expand(rect(0.4, 0.4, 0.2, 0.2), 0.5, 0.1)
+	if !nearRect(got, rect(0.35, 0.33, 0.3, 0.3)) {
+		t.Errorf("확대 50%%·올림 10%%: %+v", got)
 	}
 }

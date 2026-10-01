@@ -23,7 +23,7 @@ func TestDetectSize(t *testing.T) {
 
 func TestBlurFuncUsesFrameBoxes(t *testing.T) {
 	auto := [][]media.Rect{nil, {{X: 0.5, Y: 0, W: 0.5, H: 1}}}
-	fn := BlurFunc([]media.Rect{{X: 0, Y: 0, W: 0.25, H: 1}}, auto)
+	fn := BlurFunc([]ManualRect{{Rect: media.Rect{X: 0, Y: 0, W: 0.25, H: 1}, First: 0, End: 3}}, auto)
 	for n := 0; n < 3; n++ {
 		f := frame.New(64, 16)
 		for i := range f.Pix {
@@ -45,6 +45,24 @@ func TestBlurFuncUsesFrameBoxes(t *testing.T) {
 		}
 		if got := changed(40); got != (n == 1) {
 			t.Errorf("%d번: 자동 박스 적용 = %v", n, got)
+		}
+	}
+}
+
+func TestBlurFuncManualOnlyInSpan(t *testing.T) {
+	fn := BlurFunc([]ManualRect{{Rect: media.Rect{X: 0, Y: 0, W: 0.5, H: 1}, First: 2, End: 4}}, nil)
+	for n := 0; n < 6; n++ {
+		f := frame.New(32, 8)
+		for i := range f.Pix {
+			f.Pix[i] = byte(i * 7)
+		}
+		orig := append([]byte(nil), f.Pix...)
+		if err := fn(n, f); err != nil {
+			t.Fatal(err)
+		}
+		o := (4*32 + 4) * 3
+		if got := f.Pix[o] != orig[o]; got != (n >= 2 && n < 4) {
+			t.Errorf("%d번 프레임 가림 = %v, [2,4)에서만 가려야 함", n, got)
 		}
 	}
 }

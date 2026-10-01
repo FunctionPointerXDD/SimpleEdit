@@ -1,5 +1,6 @@
 // facecheck: 긴 변 gtDetectSize로 모든 프레임을 검출한 결과를 유사 정답으로 삼아
-// smoothCandidates(위치·크기를 부드럽게 하는 시간 σ(초), 박스 확대율)별 놓침과 흔들림을 비교한다.
+// candidates(박스 확대율, 위로 올림, 짧은 트랙 기준 점수, 장면 전환 사용 여부)별 놓침·헛가림·흔들림을 비교한다.
+// 헛가림: 표시한 박스 중 유사 정답 얼굴 중심이 하나도 안 든 것(장면 전환 직전에 먼저 뜬 블러 등)
 // 흔들림: 같은 트랙의 연속 세 프레임 중심 2차 차분(가속도), 연속 두 프레임 폭 변화를 박스 폭 대비 %로 평균
 // 덮임은 저장과 같은 타원으로 재고, 가장자리 섞임 구간은 원본이 반 넘게 남으면 덮이지 않은 것으로 본다.
 
@@ -20,10 +21,14 @@ import (
 
 const gtDetectSize = 1280
 
-const halfBlend = 1 - frame.EllipseFeather/2
+const halfBlend = 1 - frame.Feather/2
 
-var smoothCandidates = []struct{ pos, size, expand float64 }{
-	{0, 0, 0.4}, {0.05, 0.1, 0.4}, {0.05, 0.1, 0.5}, {0.1, 0.2, 0.4}, {0.1, 0.2, 0.5}, {0.1, 0.2, 0.6},
+var candidates = []struct {
+	expand, lift float64
+	shortScore   float32
+	cuts         bool
+}{
+	{0.7, 0.15, 0.8, true}, {0.7, 0.15, 0.78, true}, {0.7, 0.15, 0.75, true},
 }
 
 // 검출은 한 번만 모으고 후보마다 Track만 다시 돌려 놓침·표시 박스를 센다.
@@ -49,7 +54,7 @@ func facecheck(ctx context.Context, src string, start, end float64, gtScore floa
 	}
 	det.ScoreThreshold = detect.DefaultFaceScore
 	o := automask.OptionsFor(info.FPS)
-	samples, frames, _, err := automask.Collect(ctx, spec, det, o, nil)
+	col, err := automask.Collect(ctx, spec, det, o, nil)
 	if err != nil {
 		return err
 	}
@@ -58,11 +63,23 @@ func facecheck(ctx context.Context, src string, start, end float64, gtScore floa
 		total += len(g)
 	}
 	fmt.Printf("유사 정답: %d프레임, 얼굴 %d건 (점수 %.2f 이상, %dpx)\n", len(gt), total, gtScore, gtDetectSize)
-	for _, c := range smoothCandidates {
-		o.Track.SmoothPos, o.Track.SmoothSize, o.Track.Expand = c.pos*info.FPS, c.size*info.FPS, c.expand
-		tracked, st := automask.Track(samples, frames, o.Track)
+	fmt.Printf("장면 전환 %d곳\n", len(col.Cuts))
+	for _, c := range candidates {
+		o.Track.Expand, o.Track.Lift, o.Track.ShortScore = c.expand, c.lift, c.shortScore
+		var cuts []int
+		if c.cuts {
+			cuts = col.Cuts
+		}
+		tracked, st := automask.Track(col.Samples, cuts, col.Frames, o.Track)
 		boxes := automask.Rects(tracked, nil)
-		miss := 0
+		miss, stray := 0, 0
+		for n, bs := range boxes {
+			for _, b := range bs {
+				if n >= len(gt) || !holdsFace(b, gt[n]) {
+					stray++
+				}
+			}
+		}
 		for n, g := range gt {
 			for _, b := range g {
 				if n >= len(boxes) || !covered(b, boxes[n]) {
@@ -71,9 +88,9 @@ func facecheck(ctx context.Context, src string, start, end float64, gtScore floa
 			}
 		}
 		acc, size := jitter(tracked)
-		fmt.Printf("부드럽게 위치 %.2f초·크기 %.2f초·확대 %.0f%% | 놓침 %d/%d (%.2f%%) | 흔들림: 중심 가속 %.2f%%, 폭 변화 %.2f%% | 트랙 %d\n",
-			c.pos, c.size, 100*c.expand, miss, total, 100*float64(miss)/float64(max(1, total)), acc, size, st.Kept)
-		if verbose && c == smoothCandidates[0] {
+		fmt.Printf("확대 %.0f%%·올림 %.0f%%·짧은 트랙 %.2f·전환 %-5v | 놓침 %d/%d (%.2f%%) | 헛가림 %d | 흔들림 %.2f%%·%.2f%% | 트랙 %d\n",
+			100*c.expand, 100*c.lift, c.shortScore, c.cuts, miss, total, 100*float64(miss)/float64(max(1, total)), stray, acc, size, st.Kept)
+		if verbose && c == candidates[0] {
 			printTracks(st, info.FPS, start)
 		}
 	}
@@ -120,6 +137,17 @@ func covered(g media.Rect, masks []media.Rect) bool {
 		}
 	}
 	return in*10 >= n*n*8
+}
+
+// 정답 얼굴 중 중심이 박스 안에 드는 것이 있으면 true
+func holdsFace(b media.Rect, faces []media.Rect) bool {
+	for _, f := range faces {
+		cx, cy := f.X+f.W/2, f.Y+f.H/2
+		if cx >= b.X && cx <= b.X+b.W && cy >= b.Y && cy <= b.Y+b.H {
+			return true
+		}
+	}
+	return false
 }
 
 // 검출 수가 많은 트랙부터 30개까지 출력한다.

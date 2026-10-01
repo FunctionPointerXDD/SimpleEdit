@@ -31,7 +31,7 @@ export const MESSAGES = {
     msgPrivate: '비공개 영상이라 받을 수 없습니다. 다른 영상 주소를 넣어 주세요.',
     msgRecentGone: '받아 둔 영상을 열 수 없습니다. 7일이 지나 지워졌을 수 있으니 유튜브 주소로 다시 받아 주세요.',
     msgRuntimeMiss: '얼굴 찾기에 필요한 Windows 구성 요소(Visual C++ 재배포 가능 패키지)가 없습니다. 설치한 뒤 다시 눌러 주세요.',
-    msgTooManyRects: '가릴 곳은 5개까지 정할 수 있습니다. 필요 없는 것을 지워 주세요.',
+    msgTooManyRects: '가릴 곳은 10개까지 정할 수 있습니다. 필요 없는 것을 지워 주세요.',
     msgTooShort: '자를 구간이 너무 짧습니다. 시작과 끝을 1초 이상 떨어지게 정해 주세요.',
     msgToolMissing: '프로그램 파일 일부가 없습니다. 프로그램 폴더를 처음 받은 그대로 다시 풀어 주세요.',
     msgUnavailable: '삭제되었거나 볼 수 없는 영상입니다. 다른 영상 주소를 넣어 주세요.',
@@ -60,12 +60,22 @@ export const MESSAGES = {
  * @typedef {Object} ExportRequest
  * @property {number} start
  * @property {number} end
- * @property {Rect[]} rects
+ * @property {MaskRect[]} rects
  * @property {string} fileName
  * @property {string[]} auto
  * @property {boolean} mute
  * @property {Record<string, number[]>} exclude
  * @property {boolean} overwrite
+ */
+
+/**
+ * @typedef {Object} MaskRect
+ * @property {number} x
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ * @property {number} start
+ * @property {number} end
  */
 
 /**
@@ -81,14 +91,6 @@ export const MESSAGES = {
  * @property {string} title
  * @property {number} duration
  * @property {number} savedAt
- */
-
-/**
- * @typedef {Object} Rect
- * @property {number} x
- * @property {number} y
- * @property {number} w
- * @property {number} h
  */
 
 /**

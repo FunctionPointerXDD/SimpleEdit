@@ -319,3 +319,19 @@ b { color: var(--primary-dark); }
 .folder-path { word-break: break-all; }
 
 [hidden] { display: none !important; }
+
+/* ── 직접 가림 시간 ─────────────────────────────── */
+.rect-list li.rect-item { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rect-head { display: flex; align-items: center; gap: 10px; }
+.rect-head .btn { margin-left: auto; }
+.rect-time { display: flex; align-items: center; gap: 12px; font-size: 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rect-time.out { color: var(--error); }
+.rect-time .link { min-height: 28px; padding: 0; font-size: 18px; }
+.rect-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rect-actions .btn { flex: 1; margin-left: 0; }
+.rect-spans { position: absolute; inset: 0; }
+.rect-span {
+    position: absolute; bottom: -8px; height: 14px; border-radius: 4px;
+    background: rgba(220, 38, 38, 0.75); color: #fff; font-size: 12px; font-weight: bold; line-height: 14px; padding-left: 4px;
+    overflow: hidden; white-space: nowrap;
+}

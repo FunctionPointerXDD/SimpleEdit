@@ -21,6 +21,7 @@ type Options struct {
 	Step       int
 	DetectSize int
 	Track      TrackOptions
+	Scene      SceneOptions
 }
 
 const (
@@ -42,6 +43,7 @@ func OptionsFor(fps float64) Options {
 		Step:       max(1, int(math.Round(fps/detectPerSecond))),
 		DetectSize: 640,
 		Track:      t,
+		Scene:      DefaultSceneOptions,
 	}
 }
 
@@ -51,23 +53,33 @@ type Result struct {
 	Stats  TrackStats
 }
 
-// Collect로 검출을 모은 뒤 Track으로 잇고 거른다.
+type Collection struct {
+	Samples []Sample
+	Cuts    []int
+	Frames  int
+	Found   int
+}
+
+// Collect로 검출과 컷을 모은 뒤 Track으로 잇고 거른다.
 func Analyze(ctx context.Context, s media.PipeSpec, det Detector, o Options, onProgress media.ProgressFunc) (Result, error) {
-	samples, frames, found, err := Collect(ctx, s, det, o, onProgress)
+	c, err := Collect(ctx, s, det, o, onProgress)
 	if err != nil {
 		return Result{}, err
 	}
-	boxes, stats := Track(samples, frames, o.Track)
-	return Result{Frames: boxes, Found: found, Stats: stats}, nil
+	boxes, stats := Track(c.Samples, c.Cuts, c.Frames, o.Track)
+	return Result{Frames: boxes, Found: c.Found, Stats: stats}, nil
 }
 
-// DetectSize로 줄여 디코딩하고 Step 프레임마다 검출해 비율 좌표로 모은다.
-func Collect(ctx context.Context, s media.PipeSpec, det Detector, o Options, onProgress media.ProgressFunc) (samples []Sample, frames, found int, err error) {
+// DetectSize로 줄여 디코딩하고, 프레임마다 컷 차이를 재고 Step 프레임마다 검출해 모은다.
+func Collect(ctx context.Context, s media.PipeSpec, det Detector, o Options, onProgress media.ProgressFunc) (Collection, error) {
 	ds := s
 	ds.Width, ds.Height = detectSize(s.Width, s.Height, o.DetectSize)
 	total := s.FrameCount()
-	err = media.DecodeFrames(ctx, ds, func(n int, f frame.Frame) error {
-		frames = n + 1
+	var c Collection
+	var scene sceneDiffs
+	err := media.DecodeFrames(ctx, ds, func(n int, f frame.Frame) error {
+		c.Frames = n + 1
+		scene.add(f)
 		if onProgress != nil {
 			onProgress(min(0.99, float64(n+1)/float64(total)))
 		}
@@ -78,14 +90,18 @@ func Collect(ctx context.Context, s media.PipeSpec, det Detector, o Options, onP
 		if err != nil {
 			return err
 		}
-		found += len(boxes)
-		samples = append(samples, Sample{Frame: n, Dets: normalize(boxes, f.W, f.H)})
+		c.Found += len(boxes)
+		c.Samples = append(c.Samples, Sample{Frame: n, Dets: normalize(boxes, f.W, f.H)})
 		return nil
 	})
-	if err == nil && onProgress != nil {
+	if err != nil {
+		return Collection{}, err
+	}
+	c.Cuts = o.Scene.cuts(scene.diffs)
+	if onProgress != nil {
 		onProgress(1)
 	}
-	return samples, frames, found, err
+	return c, nil
 }
 
 // 긴 변이 limit를 넘으면 비율대로 줄이고, 두 변을 짝수로 내린다.
@@ -108,11 +124,18 @@ func normalize(boxes []detect.Box, w, h int) []Det {
 	return out
 }
 
-// 프레임마다 수동 사각형은 사각형으로, n번째 자동 박스는 타원으로 블러 처리한다.
-func BlurFunc(manual []media.Rect, auto [][]media.Rect) media.FrameFunc {
+type ManualRect struct {
+	Rect       media.Rect
+	First, End int
+}
+
+// n번째 프레임에 [First, End) 안인 수동 사각형은 사각형으로, 자동 박스는 타원으로 흐린다.
+func BlurFunc(manual []ManualRect, auto [][]media.Rect) media.FrameFunc {
 	return func(n int, f frame.Frame) error {
-		for _, r := range manual {
-			blur(f, r, false)
+		for _, m := range manual {
+			if n >= m.First && n < m.End {
+				blur(f, m.Rect, false)
+			}
 		}
 		if n < len(auto) {
 			for _, r := range auto[n] {
@@ -123,14 +146,14 @@ func BlurFunc(manual []media.Rect, auto [][]media.Rect) media.FrameFunc {
 	}
 }
 
-// 비율 좌표를 픽셀로 바꿔 흐린다. ellipse면 내접 타원을 FaceBlurSigma로, 아니면 BlurSigma로
+// 비율 좌표를 픽셀로 바꿔 BlurSigma로 흐린다. ellipse면 내접 타원만
 func blur(f frame.Frame, r media.Rect, ellipse bool) {
 	px := image.Rect(
 		int(math.Floor(r.X*float64(f.W))), int(math.Floor(r.Y*float64(f.H))),
 		int(math.Ceil((r.X+r.W)*float64(f.W))), int(math.Ceil((r.Y+r.H)*float64(f.H))),
 	)
 	if ellipse {
-		f.BlurEllipse(px, media.FaceBlurSigma(px.Dx(), px.Dy()))
+		f.BlurEllipse(px, media.BlurSigma(px.Dx(), px.Dy()))
 		return
 	}
 	f.Blur(px, media.BlurSigma(px.Dx(), px.Dy()))

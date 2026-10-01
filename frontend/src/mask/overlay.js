@@ -1,15 +1,20 @@
 // MIN_DRAG_PX보다 작게 끈 것은 클릭으로 보고, 그 자리의 자동 박스를 빼거나 되살린다.
-// 가림 표시는 영상 프레임을 저장과 같은 세기로 흐려 그린다. 사각형은 media.BlurSigma(긴 변 20%)다.
+// 가림 표시는 영상 프레임을 저장과 같은 세기(media.BlurSigma, 긴 변 8%)로 흐려 그린다.
 // 자동 얼굴은 저장(frame.BlurEllipse)과 같게 박스에 내접한 타원, 직접 그린 곳은 사각형이다.
-// 타원은 media.FaceBlurSigma(8%) 세기로, 바깥 ELLIPSE_FEATHER 구간을 smoothstep으로 원본과 섞는다.
+// 타원은 frame.Feather처럼 바깥 FEATHER 구간을 원형 그라디언트(smoothstep)로 원본과 섞는다.
+// 사각형은 섞지 않고 그 안만 흐린다.
+// 자동 박스는 재생 중 currentTime이 화면 프레임보다 앞서 장면 전환 때 블러가 먼저 보여서,
+// requestVideoFrameCallback이 알려 준 표시 프레임 시각(mediaTime)으로 고른다. 탐색 중엔 currentTime.
+// getRects(t)는 그 시각에 켜진 직접 가림만 번호(label)와 함께 준다.
 // 직접 가림이 꽉 차도 누른 자리에 자동 박스가 있으면 뺄 수 있다. 겹치면 가장 작은 박스를 고른다.
 
 import {h} from '../ui/dom.js';
 
 const MIN_DRAG_PX = 8;
-const BLUR_SHARE = 0.2;
-const FACE_BLUR_SHARE = 0.08;
-const ELLIPSE_FEATHER = 0.25;
+const BLUR_SHARE = 0.08;
+const FEATHER = 0.25;
+const FEATHER_STOPS = 8;
+const smoothstep = (t) => t * t * (3 - 2 * t);
 const MIN_BLUR_SIGMA = 4;
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
@@ -25,7 +30,7 @@ function contentBox(video) {
     return {x: (ew - w) / 2, y: (eh - h) / 2, w, h};
 }
 
-// 좌표는 영상 영역 비율. 재생 중엔 rAF, 멈춤 땐 timeupdate·seeked로 다시 그린다.
+// 좌표는 영상 영역 비율. 새 프레임이 보일 때마다(없으면 재생 중 rAF), timeupdate·seeked에 다시 그린다.
 export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd, onAdd, onBlocked, onStart}) {
     const off = new AbortController();
     const on = (target, type, fn) => target.addEventListener(type, fn, {signal: off.signal});
@@ -35,6 +40,11 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
     const scratchCtx = scratch.getContext('2d');
     let drag = null;
     let raf = 0;
+    let vfc = 0;
+    /** @type {number | null} */
+    let frameTime = null;
+    const hasVFC = 'requestVideoFrameCallback' in video;
+    const shownTime = () => frameTime ?? video.currentTime;
 
     function pointIn(ev) {
         const r = canvas.getBoundingClientRect();
@@ -68,7 +78,7 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
 
     function autoAt(p) {
         let best = null;
-        for (const b of getAuto?.(video.currentTime) || []) {
+        for (const b of getAuto?.(shownTime()) || []) {
             const inside = p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
             if (inside && (!best || b.w * b.h < best.w * best.h)) best = b;
         }
@@ -94,7 +104,7 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
         const box = contentBox(video);
         const toPx = (r) => [box.x + r.x * box.w, box.y + r.y * box.h, r.w * box.w, r.h * box.h];
 
-        for (const r of getAuto?.(video.currentTime) || []) {
+        for (const r of getAuto?.(shownTime()) || []) {
             const [x, y, w, hh] = toPx(r);
             if (r.excluded) {
                 drawExcluded(x, y, w, hh);
@@ -106,14 +116,14 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
             shapePath(x, y, w, hh, true);
             ctx2d.stroke();
         }
-        getRects().forEach((r, i) => {
+        for (const r of getRects(shownTime())) {
             const [x, y, w, hh] = toPx(r);
             drawBlurHint(box, r, x, y, w, hh, false);
             ctx2d.lineWidth = 3;
             ctx2d.strokeStyle = '#ff3b30';
             ctx2d.strokeRect(x, y, w, hh);
-            drawBadge(x, y, String(i + 1));
-        });
+            drawBadge(x, y, String(r.label));
+        }
         if (drag) {
             const [x, y, w, hh] = toPx(dragRect());
             ctx2d.setLineDash([8, 6]);
@@ -158,23 +168,13 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
             return;
         }
         const scale = box.w / vw;
-        const share = ellipse ? FACE_BLUR_SHARE : BLUR_SHARE;
-        const sigma = Math.max(MIN_BLUR_SIGMA * scale, Math.max(w, hh) * share);
+        const sigma = Math.max(MIN_BLUR_SIGMA * scale, Math.max(w, hh) * BLUR_SHARE);
         const pad = (sigma * 2) / scale;
         const sx = Math.max(0, r.x * vw - pad);
         const sy = Math.max(0, r.y * vh - pad);
         const sw = Math.min(vw, (r.x + r.w) * vw + pad) - sx;
         const sh = Math.min(vh, (r.y + r.h) * vh + pad) - sy;
         const dest = [box.x + sx * scale, box.y + sy * scale, sw * scale, sh * scale];
-        if (!ellipse) {
-            ctx2d.save();
-            shapePath(x, y, w, hh, false);
-            ctx2d.clip();
-            ctx2d.filter = `blur(${sigma}px)`;
-            ctx2d.drawImage(video, sx, sy, sw, sh, ...dest);
-            ctx2d.restore();
-            return;
-        }
         const dpr = window.devicePixelRatio || 1;
         scratch.width = Math.max(1, Math.ceil(w * dpr));
         scratch.height = Math.max(1, Math.ceil(hh * dpr));
@@ -183,21 +183,24 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
         scratchCtx.drawImage(video, sx, sy, sw, sh, dest[0] - x, dest[1] - y, dest[2], dest[3]);
         scratchCtx.filter = 'none';
         scratchCtx.globalCompositeOperation = 'destination-in';
+        if (ellipse) maskEllipse(w, hh);
+        scratchCtx.globalCompositeOperation = 'source-over';
+        ctx2d.drawImage(scratch, x, y, w, hh);
+    }
+
+    function maskEllipse(w, hh) {
         scratchCtx.translate(w / 2, hh / 2);
         scratchCtx.scale(1, hh / Math.max(w, 1));
         const g = scratchCtx.createRadialGradient(0, 0, 0, 0, 0, w / 2);
-        for (let i = 0; i <= 8; i++) {
-            const q = 1 - ELLIPSE_FEATHER + (ELLIPSE_FEATHER * i) / 8;
-            const t = (1 - q) / ELLIPSE_FEATHER;
-            g.addColorStop(q, `rgba(0,0,0,${t * t * (3 - 2 * t)})`);
+        for (let i = 0; i <= FEATHER_STOPS; i++) {
+            const q = 1 - FEATHER + (FEATHER * i) / FEATHER_STOPS;
+            g.addColorStop(q, `rgba(0,0,0,${smoothstep(1 - i / FEATHER_STOPS)})`);
         }
         g.addColorStop(0, 'rgba(0,0,0,1)');
         scratchCtx.fillStyle = g;
         scratchCtx.beginPath();
         scratchCtx.arc(0, 0, w / 2, 0, Math.PI * 2);
         scratchCtx.fill();
-        scratchCtx.globalCompositeOperation = 'source-over';
-        ctx2d.drawImage(scratch, x, y, w, hh);
     }
 
     function drawBadge(x, y, text) {
@@ -235,11 +238,21 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
     on(canvas, 'pointerup', () => finish(true));
     on(canvas, 'pointercancel', () => finish(false));
     on(video, 'loadedmetadata', draw);
+    on(video, 'seeking', () => {
+        frameTime = null;
+    });
     on(video, 'seeked', draw);
     on(video, 'timeupdate', draw);
     on(video, 'play', () => {
-        if (!raf) raf = requestAnimationFrame(tick);
+        if (!hasVFC && !raf) raf = requestAnimationFrame(tick);
     });
+    if (hasVFC) vfc = video.requestVideoFrameCallback(onFrame);
+
+    function onFrame(_now, meta) {
+        frameTime = meta.mediaTime;
+        draw();
+        vfc = video.requestVideoFrameCallback(onFrame);
+    }
 
     function tick() {
         draw();
@@ -255,6 +268,7 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
         destroy() {
             off.abort();
             cancelAnimationFrame(raf);
+            if (hasVFC) video.cancelVideoFrameCallback(vfc);
             ro.disconnect();
         },
     };

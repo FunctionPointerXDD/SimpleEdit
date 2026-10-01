@@ -13,12 +13,12 @@ func TestToPixels(t *testing.T) {
 		want   PixelRect
 		wantOK bool
 	}{
-		{"가운데 1080p", Rect{0.25, 0.25, 0.5, 0.5}, 1920, 1080, PixelRect{480, 270, 960, 540}, true},
-		{"홀수 좌표는 짝수로", Rect{0.1, 0.1, 0.1, 0.1}, 1280, 720, PixelRect{128, 72, 128, 72}, true},
-		{"오른쪽 아래 밖으로 나감", Rect{0.9, 0.9, 0.5, 0.5}, 1920, 1080, PixelRect{1728, 972, 192, 108}, true},
-		{"왼쪽 위 밖에서 시작", Rect{-0.1, -0.1, 0.2, 0.2}, 1000, 1000, PixelRect{0, 0, 100, 100}, true},
-		{"세로 영상", Rect{0.5, 0.5, 0.5, 0.5}, 1080, 1920, PixelRect{540, 960, 540, 960}, true},
-		{"홀수 해상도 끝", Rect{0, 0, 1, 1}, 853, 481, PixelRect{0, 0, 852, 480}, true},
+		{"가운데 1080p", Rect{0.25, 0.25, 0.5, 0.5}, 1920, 1080, PixelRect{X: 480, Y: 270, W: 960, H: 540}, true},
+		{"홀수 좌표는 짝수로", Rect{0.1, 0.1, 0.1, 0.1}, 1280, 720, PixelRect{X: 128, Y: 72, W: 128, H: 72}, true},
+		{"오른쪽 아래 밖으로 나감", Rect{0.9, 0.9, 0.5, 0.5}, 1920, 1080, PixelRect{X: 1728, Y: 972, W: 192, H: 108}, true},
+		{"왼쪽 위 밖에서 시작", Rect{-0.1, -0.1, 0.2, 0.2}, 1000, 1000, PixelRect{X: 0, Y: 0, W: 100, H: 100}, true},
+		{"세로 영상", Rect{0.5, 0.5, 0.5, 0.5}, 1080, 1920, PixelRect{X: 540, Y: 960, W: 540, H: 960}, true},
+		{"홀수 해상도 끝", Rect{X: 0, Y: 0, W: 1, H: 1}, 853, 481, PixelRect{X: 0, Y: 0, W: 852, H: 480}, true},
 		{"너무 작음", Rect{0.5, 0.5, 0.001, 0.001}, 1920, 1080, PixelRect{}, false},
 		{"완전히 밖", Rect{1.2, 0.2, 0.1, 0.1}, 1920, 1080, PixelRect{}, false},
 	}
@@ -41,35 +41,11 @@ func TestToPixels(t *testing.T) {
 }
 
 func TestBlurSigma(t *testing.T) {
-	tests := []struct{ w, h, want int }{{10, 8, 4}, {40, 20, 8}, {100, 200, 40}, {320, 160, 64}}
+	tests := []struct{ w, h, want int }{{10, 8, 4}, {40, 20, 4}, {100, 200, 16}, {320, 160, 26}}
 	for _, tt := range tests {
 		if got := BlurSigma(tt.w, tt.h); got != tt.want {
 			t.Errorf("BlurSigma(%d,%d) = %d, want %d", tt.w, tt.h, got, tt.want)
 		}
-	}
-}
-
-func TestBlurFilter(t *testing.T) {
-	if got := BlurFilter(nil); got != "" {
-		t.Errorf("빈 목록 = %q", got)
-	}
-
-	one := BlurFilter([]PixelRect{{X: 100, Y: 50, W: 320, H: 160}})
-	wantOne := "[0:v]split=2[base][m0]" +
-		";[m0]crop=320:160:100:50,scale=26:14:flags=area,format=gbrp,boxblur=5:3,format=yuv420p,scale=320:160:flags=bilinear[p0]" +
-		";[base][p0]overlay=100:50[v]"
-	if one != wantOne {
-		t.Errorf("1개:\n got %s\nwant %s", one, wantOne)
-	}
-
-	three := BlurFilter([]PixelRect{{0, 0, 32, 32}, {100, 100, 8, 8}, {200, 0, 64, 16}})
-	wantThree := "[0:v]split=4[base][m0][m1][m2]" +
-		";[m0]crop=32:32:0:0,scale=32:32:flags=area,format=gbrp,boxblur=6:3,format=yuv420p,scale=32:32:flags=bilinear[p0]" +
-		";[m1]crop=8:8:100:100,scale=8:8:flags=area,format=gbrp,boxblur=3:3,format=yuv420p,scale=8:8:flags=bilinear[p1]" +
-		";[m2]crop=64:16:200:0,scale=64:16:flags=area,format=gbrp,boxblur=7:3,format=yuv420p,scale=64:16:flags=bilinear[p2]" +
-		";[base][p0]overlay=0:0[o0];[o0][p1]overlay=100:100[o1];[o1][p2]overlay=200:0[v]"
-	if three != wantThree {
-		t.Errorf("3개:\n got %s\nwant %s", three, wantThree)
 	}
 }
 
@@ -85,13 +61,6 @@ func TestExportArgs(t *testing.T) {
 	}
 	if plain[len(plain)-1] != "out.mp4" {
 		t.Errorf("출력 파일이 마지막이 아님: %v", plain)
-	}
-
-	masked := ExportArgs(ExportSpec{Source: "in.mp4", Output: "out.mp4", Duration: 5,
-		Rects: []PixelRect{{0, 0, 32, 32}}})
-	i := slices.Index(masked, "-filter_complex")
-	if i < 0 || masked[i+2] != "-map" || masked[i+3] != "[v]" {
-		t.Errorf("블러 인자 이상: %v", masked)
 	}
 }
 

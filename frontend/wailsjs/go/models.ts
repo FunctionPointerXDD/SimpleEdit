@@ -45,7 +45,7 @@ export namespace main {
 	export class ExportRequest {
 	    start: number;
 	    end: number;
-	    rects: media.Rect[];
+	    rects: media.MaskRect[];
 	    fileName: string;
 	    auto: string[];
 	    mute: boolean;
@@ -60,7 +60,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.start = source["start"];
 	        this.end = source["end"];
-	        this.rects = this.convertValues(source["rects"], media.Rect);
+	        this.rects = this.convertValues(source["rects"], media.MaskRect);
 	        this.fileName = source["fileName"];
 	        this.auto = source["auto"];
 	        this.mute = source["mute"];
@@ -133,14 +133,16 @@ export namespace main {
 
 export namespace media {
 	
-	export class Rect {
+	export class MaskRect {
 	    x: number;
 	    y: number;
 	    w: number;
 	    h: number;
+	    start: number;
+	    end: number;
 	
 	    static createFrom(source: any = {}) {
-	        return new Rect(source);
+	        return new MaskRect(source);
 	    }
 	
 	    constructor(source: any = {}) {
@@ -149,6 +151,8 @@ export namespace media {
 	        this.y = source["y"];
 	        this.w = source["w"];
 	        this.h = source["h"];
+	        this.start = source["start"];
+	        this.end = source["end"];
 	    }
 	}
 

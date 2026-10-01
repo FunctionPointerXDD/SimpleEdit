@@ -1,43 +1,29 @@
 // Rect는 레터박스를 뺀 영상 영역 기준 0~1 좌표, PixelRect는 원본 px(짝수)다.
-// 블러 세기는 저장 방식(ffmpeg 필터·Go 프레임)과 미리보기가 같은 규칙을 쓴다. 사각형은 BlurSigma,
-// 자동 얼굴 타원은 FaceBlurSigma다.
-// 긴 변의 20%면 얼굴 박스 안이 뭉개져 알아볼 수 없고, 작은 박스도 minBlurSigma를 지킨다.
-// 자동 얼굴(타원)은 FaceBlurSigma로 8%다. 20% → 14%(너무 진함) → 8%(사용자 판단, 2026-09-30).
-// 8%는 방송 블랙박스 영상(hx_4EDQ3ky4)의 얼굴 블러 5~7%보다 조금 진하게 잡은 값이다.
-// 필터도 frame.Blur처럼 시그마가 blurCell 안팎이 되게 줄여 흐린 뒤 키운다(속도 2배 차).
-// 줄인 작은 그림에서 gblur는 가장자리가 깨져(초록·검은 줄) frame.Blur와 같은 boxblur 3회를 쓴다.
-// 작은 yuv420p는 색 평면이 너무 작아 흐릴 때만 gbrp로 바꾼다.
-// boxblur는 2×반지름+1이 짧은 변을 넘으면 값이 틀어져, 짧은 변은 minBlurSide 이상으로 줄이고
-// 반지름은 (짧은 변-1)/2 이하로 둔다.
+// MaskRect.Start·End는 직접 가림을 켤 원본 기준 초다(화면이 자른 구간 전체로 채워 보냄).
+// 블러 세기는 저장(Go 프레임)과 미리보기가 같은 BlurSigma를 쓴다. 자동 얼굴·직접 가림 모두 긴 변의 8%.
+// 기록: 사각형 20%·얼굴 20% → 얼굴 14%(너무 진함) → 얼굴 8%(09-30, 방송 블랙박스 5~7% 참고)
+// → 사각형도 8%(10-01 사용자 요청). 작은 박스도 minBlurSigma를 지킨다.
+// 가림이 있으면 저장은 모두 Go 파이프(frame.Blur)로 한다. ffmpeg 필터 블러는 미리보기·저장
+// 블러를 한 곳(frame)에서 맞추려고 10-01에 뺐다. ExportSpec은 가림 없는 저장(자르기·소리)만 다룬다.
 // ExportSpec.Start·Duration은 초 단위다.
 
 package media
 
 import (
-	"fmt"
 	"math"
 	"strconv"
-	"strings"
 )
 
-const MaxRects = 5
+const MaxRects = 10
 
 const (
-	blurShare     = 0.2
-	faceBlurShare = 0.08
-	minBlurSigma  = 4
-	blurCell      = 4
-	minBlurSide   = 12
+	blurShare    = 0.08
+	minBlurSigma = 4
 )
 
 // max(minBlurSigma, 긴 변 × blurShare)를 정수 px로 반올림한다.
 func BlurSigma(w, h int) int {
 	return max(minBlurSigma, int(math.Round(float64(max(w, h))*blurShare)))
-}
-
-// BlurSigma와 같되 비율이 faceBlurShare다.
-func FaceBlurSigma(w, h int) int {
-	return max(minBlurSigma, int(math.Round(float64(max(w, h))*faceBlurShare)))
 }
 
 type Rect struct {
@@ -46,6 +32,17 @@ type Rect struct {
 	W float64 `json:"w"`
 	H float64 `json:"h"`
 }
+
+type MaskRect struct {
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	W     float64 `json:"w"`
+	H     float64 `json:"h"`
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+}
+
+func (r MaskRect) Box() Rect { return Rect{X: r.X, Y: r.Y, W: r.W, H: r.H} }
 
 type PixelRect struct {
 	X, Y, W, H int
@@ -86,46 +83,15 @@ func RectsToPixels(rs []Rect, width, height int) []PixelRect {
 	return out
 }
 
-// 사각형마다 crop→축소→상자 평균 3회→확대 후 차례로 overlay한다. 출력은 [v]
-func BlurFilter(rects []PixelRect) string {
-	if len(rects) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("[0:v]split=" + strconv.Itoa(len(rects)+1) + "[base]")
-	for i := range rects {
-		fmt.Fprintf(&b, "[m%d]", i)
-	}
-	for i, r := range rects {
-		sigma := BlurSigma(r.W, r.H)
-		k := max(1, min(sigma/blurCell, min(r.W, r.H)/minBlurSide))
-		sw, sh := evenUp((r.W+k-1)/k), evenUp((r.H+k-1)/k)
-		rad := max(1, min((sigma+k/2)/k, (min(sw, sh)-1)/2))
-		fmt.Fprintf(&b, ";[m%d]crop=%d:%d:%d:%d,scale=%d:%d:flags=area,format=gbrp,boxblur=%d:3,format=yuv420p,scale=%d:%d:flags=bilinear[p%d]",
-			i, r.W, r.H, r.X, r.Y, sw, sh, rad, r.W, r.H, i)
-	}
-	prev := "base"
-	for i, r := range rects {
-		out := "o" + strconv.Itoa(i)
-		if i == len(rects)-1 {
-			out = "v"
-		}
-		fmt.Fprintf(&b, ";[%s][p%d]overlay=%d:%d[%s]", prev, i, r.X, r.Y, out)
-		prev = out
-	}
-	return b.String()
-}
-
 type ExportSpec struct {
 	Source   string
 	Output   string
 	Start    float64
 	Duration float64
-	Rects    []PixelRect
 	Mute     bool
 }
 
-// 사각형이 있으면 filter_complex로 가리고, H.264 yuv420p로 인코딩한다.
+// 구간을 잘라 H.264 yuv420p로 인코딩한다.
 func ExportArgs(s ExportSpec) []string {
 	args := []string{
 		"-hide_banner", "-y",
@@ -133,11 +99,7 @@ func ExportArgs(s ExportSpec) []string {
 		"-i", s.Source,
 		"-t", secs(s.Duration),
 	}
-	if f := BlurFilter(s.Rects); f != "" {
-		args = append(args, "-filter_complex", f, "-map", "[v]")
-	} else {
-		args = append(args, "-map", "0:v:0")
-	}
+	args = append(args, "-map", "0:v:0")
 	args = append(args, audioArgs(s.Mute, 0)...)
 	args = append(args,
 		"-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
@@ -183,5 +145,3 @@ func evenCeil(v float64) int {
 	n := int(math.Ceil(v - 1e-9))
 	return (n + 1) &^ 1
 }
-
-func evenUp(v int) int { return max(2, (v+1)&^1) }

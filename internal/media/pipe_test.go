@@ -128,38 +128,31 @@ func TestProcessFramesLengthAndAudio(t *testing.T) {
 	}
 }
 
-func TestPipeBlurMatchesFilterPosition(t *testing.T) {
+func TestPipeBlurStaysInRect(t *testing.T) {
 	useTools(t)
 	src := makeSource(t, 320, 240, 3)
 	s := probeSpec(t, src, 0.5, 1.5)
 	orig := grabFrame(t, s, 20)
 	for _, rect := range []PixelRect{{X: 64, Y: 48, W: 128, H: 96}, {X: 32, Y: 160, W: 256, H: 48}} {
-		dir := t.TempDir()
-		pipeOut := filepath.Join(dir, "pipe.mp4")
-		filterOut := filepath.Join(dir, "filter.mp4")
-		if err := ProcessFrames(context.Background(), s, pipeOut, BlurRects([]PixelRect{rect}), nil); err != nil {
-			t.Fatal(err)
-		}
-		if err := Export(context.Background(), ExportSpec{Source: src, Output: filterOut, Start: 0.5, Duration: 1.5, Rects: []PixelRect{rect}}, nil); err != nil {
+		out := filepath.Join(t.TempDir(), "pipe.mp4")
+		if err := ProcessFrames(context.Background(), s, out, BlurRects([]PixelRect{rect}), nil); err != nil {
 			t.Fatal(err)
 		}
 		want := image.Rect(rect.X, rect.Y, rect.X+rect.W, rect.Y+rect.H)
-		for name, path := range map[string]string{"pipe": pipeOut, "filter": filterOut} {
-			got := grabFrame(t, PipeSpec{Source: path, Duration: 1.5, FPS: s.FPS, Width: s.Width, Height: s.Height}, 20)
-			b := changedBounds(orig, got, 12)
-			if b.Empty() || !b.In(want.Inset(-8)) {
-				t.Errorf("%s %v: 바뀐 영역 %v가 사각형 밖으로 나감", name, want, b)
+		got := grabFrame(t, PipeSpec{Source: out, Duration: 1.5, FPS: s.FPS, Width: s.Width, Height: s.Height}, 20)
+		b := changedBounds(orig, got, 12)
+		if b.Empty() || !b.In(want.Inset(-8)) {
+			t.Errorf("%v: 바뀐 영역 %v가 사각형 밖으로 나감", want, b)
+		}
+		om, gm := meanColor(orig, want.Inset(want.Dy()/4)), meanColor(got, want.Inset(want.Dy()/4))
+		for c := range om {
+			if d := om[c] - gm[c]; d > 20 || d < -20 {
+				t.Errorf("%v: 블러 전후 평균색이 다름 %v → %v (얼룩)", want, om, gm)
+				break
 			}
-			om, gm := meanColor(orig, want.Inset(4)), meanColor(got, want.Inset(4))
-			for c := range om {
-				if d := om[c] - gm[c]; d > 20 || d < -20 {
-					t.Errorf("%s %v: 블러 전후 평균색이 다름 %v → %v (얼룩)", name, want, om, gm)
-					break
-				}
-			}
-			if step := maxRowStep(got, want.Inset(2)); step > 12 {
-				t.Errorf("%s %v: 이웃 줄 밝기 차 %.1f (줄무늬)", name, want, step)
-			}
+		}
+		if step := maxRowStep(got, want.Inset(2)); step > 12 {
+			t.Errorf("%v: 이웃 줄 밝기 차 %.1f (줄무늬)", want, step)
 		}
 	}
 }

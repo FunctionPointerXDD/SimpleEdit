@@ -2,7 +2,9 @@
   "generated": "go run ./cmd/apispec (-check로 검사). 손으로 고치지 말 것",
   "notes": {
     "app.go": [
-      "ExportRequest.Rects는 레터박스를 뺀 영상 영역 기준 0~1 비율 좌표다.",
+      "ExportRequest.Rects는 레터박스를 뺀 영상 영역 기준 0~1 비율 좌표와 원본 기준 켜는 시각(초)이다.",
+      "시각은 저장 구간으로 자르고 프레임 번호(round(초×fps))로 바꾼다. 가림이 있으면 Go 파이프로 저장한다.",
+      "End ≤ Start면 구간 전체로 본다(잘못 와도 덜 가리는 쪽으로 틀리지 않게).",
       "ProgressEvent.Remaining은 남은 초이고, 아직 모르면 -1이다.",
       "유튜브 영상 이름은 yt-dlp가 알려 준 제목, 없으면 youtubeName이다. 받은 원본은 7일 보관(appdir.KeepDays).",
       "VideoInfo.Lowered는 1080p를 못 받아 720p로 받았다는 뜻이다.",
@@ -194,7 +196,7 @@
       {
         "json": "rects",
         "go": "Rects",
-        "type": "Rect[]"
+        "type": "MaskRect[]"
       },
       {
         "json": "fileName",
@@ -220,6 +222,38 @@
         "json": "overwrite",
         "go": "Overwrite",
         "type": "boolean"
+      }
+    ],
+    "MaskRect": [
+      {
+        "json": "x",
+        "go": "X",
+        "type": "number"
+      },
+      {
+        "json": "y",
+        "go": "Y",
+        "type": "number"
+      },
+      {
+        "json": "w",
+        "go": "W",
+        "type": "number"
+      },
+      {
+        "json": "h",
+        "go": "H",
+        "type": "number"
+      },
+      {
+        "json": "start",
+        "go": "Start",
+        "type": "number"
+      },
+      {
+        "json": "end",
+        "go": "End",
+        "type": "number"
       }
     ],
     "ProgressEvent": [
@@ -258,28 +292,6 @@
       {
         "json": "savedAt",
         "go": "SavedAt",
-        "type": "number"
-      }
-    ],
-    "Rect": [
-      {
-        "json": "x",
-        "go": "X",
-        "type": "number"
-      },
-      {
-        "json": "y",
-        "go": "Y",
-        "type": "number"
-      },
-      {
-        "json": "w",
-        "go": "W",
-        "type": "number"
-      },
-      {
-        "json": "h",
-        "go": "H",
         "type": "number"
       }
     ],
@@ -363,7 +375,7 @@
     "msgPrivate": "비공개 영상이라 받을 수 없습니다. 다른 영상 주소를 넣어 주세요.",
     "msgRecentGone": "받아 둔 영상을 열 수 없습니다. 7일이 지나 지워졌을 수 있으니 유튜브 주소로 다시 받아 주세요.",
     "msgRuntimeMiss": "얼굴 찾기에 필요한 Windows 구성 요소(Visual C++ 재배포 가능 패키지)가 없습니다. 설치한 뒤 다시 눌러 주세요.",
-    "msgTooManyRects": "가릴 곳은 5개까지 정할 수 있습니다. 필요 없는 것을 지워 주세요.",
+    "msgTooManyRects": "가릴 곳은 10개까지 정할 수 있습니다. 필요 없는 것을 지워 주세요.",
     "msgTooShort": "자를 구간이 너무 짧습니다. 시작과 끝을 1초 이상 떨어지게 정해 주세요.",
     "msgToolMissing": "프로그램 파일 일부가 없습니다. 프로그램 폴더를 처음 받은 그대로 다시 풀어 주세요.",
     "msgUnavailable": "삭제되었거나 볼 수 없는 영상입니다. 다른 영상 주소를 넣어 주세요."

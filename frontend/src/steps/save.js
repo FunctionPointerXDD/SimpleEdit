@@ -12,7 +12,7 @@ import {createMessage} from '../ui/message.js';
 import {createProgress} from '../ui/progress.js';
 import {confirmDialog} from '../ui/modal.js';
 import * as api from '../api.js';
-import {state, resetAll, enabledAuto, autoExclusions} from '../state.js';
+import {state, resetAll, enabledAuto, autoExclusions, rectsForExport} from '../state.js';
 import {formatClock, formatLength} from '../util/time.js';
 
 const STAGE_TEXT = {export: '영상을 저장하는 중입니다…'};
@@ -39,6 +39,7 @@ export const saveStep = {
         });
         const done = h('div.done-card', {hidden: true});
         const len = state.end - state.start;
+        const manualCount = rectsForExport().length;
 
         root.append(
             h('section.panel', {},
@@ -47,7 +48,7 @@ export const saveStep = {
                     h('dt', {}, '자른 구간'), h('dd', {}, `${formatClock(state.start)} ~ ${formatClock(state.end)} (${formatLength(len)})`),
                     h('dt', {}, '자동 가림'), h('dd', {}, enabledAuto().length ? '사람 얼굴' : '없음'),
                     h('dt', {}, '소리'), h('dd', {}, state.mute ? '없앰' : '그대로'),
-                    h('dt', {}, '직접 가린 곳'), h('dd', {}, state.rects.length ? `${state.rects.length}곳` : '없음'),
+                    h('dt', {}, '직접 가린 곳'), h('dd', {}, manualCount ? `${manualCount}곳` : '없음'),
                     h('dt', {}, '파일 이름'), h('dd.name-row', {}, nameInput, h('span.ext', {}, '.mp4')),
                     h('dt', {}, '저장 위치'), h('dd.folder-row', {}, folderText, folderBtn),
                 ),
@@ -81,7 +82,7 @@ export const saveStep = {
 
         function content() {
             return {
-                start: state.start, end: state.end, rects: state.rects,
+                start: state.start, end: state.end, rects: rectsForExport(),
                 auto: enabledAuto(), mute: state.mute, exclude: autoExclusions(),
             };
         }
