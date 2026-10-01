@@ -7,7 +7,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Desktop은 OneDrive 이동까지 반영한 바탕화면 경로다.
+// KnownFolderPath로 OneDrive 이동까지 반영하고, 실패하면 ~/Desktop
 func Desktop() string {
 	if p, err := windows.KnownFolderPath(windows.FOLDERID_Desktop, 0); err == nil && p != "" {
 		return p
@@ -16,7 +16,7 @@ func Desktop() string {
 	return filepath.Join(home, "Desktop")
 }
 
-// FreeBytes는 path가 있는 드라이브의 남은 용량이다. 알 수 없으면 -1.
+// GetDiskFreeSpaceEx의 사용자 가용 바이트. 실패하면 -1
 func FreeBytes(path string) int64 {
 	p, err := windows.UTF16PtrFromString(path)
 	if err != nil {

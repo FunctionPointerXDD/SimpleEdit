@@ -8,10 +8,9 @@ import (
 	"time"
 )
 
-// AppName은 %LOCALAPPDATA% 아래 폴더 이름이다.
 const AppName = "운전영상편집기"
 
-// Base는 %LOCALAPPDATA%\운전영상편집기 경로다.
+// LOCALAPPDATA → 사용자 캐시 → 임시 폴더 순으로 앞의 것을 쓴다.
 func Base() string {
 	if d := os.Getenv("LOCALAPPDATA"); d != "" {
 		return filepath.Join(d, AppName)
@@ -25,7 +24,7 @@ func Base() string {
 func Logs() string { return filepath.Join(Base(), "logs") }
 func Work() string { return filepath.Join(Base(), "work") }
 
-// NewWorkDir는 work 아래 이번 작업 폴더를 만든다.
+// work\날짜-시각 폴더를 만들고, 이미 있으면 -2, -3을 붙인다.
 func NewWorkDir(now time.Time) (string, error) {
 	if err := os.MkdirAll(Work(), 0o755); err != nil {
 		return "", err
@@ -44,7 +43,7 @@ func NewWorkDir(now time.Time) (string, error) {
 	}
 }
 
-// CleanOld는 maxAge보다 오래된 항목을 지운 개수를 준다.
+// dir 바로 아래 항목 중 수정 시각이 maxAge를 넘은 것을 지운 개수
 func CleanOld(dir string, maxAge time.Duration, now time.Time) int {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

@@ -1,19 +1,31 @@
+// Rect는 레터박스를 뺀 영상 영역 기준 0~1 좌표, PixelRect는 원본 px(짝수)다.
+// MaskRect.Start·End는 직접 가림을 켤 원본 기준 초다(화면이 자른 구간 전체로 채워 보냄).
+// 블러 세기는 저장(Go 프레임)과 미리보기가 같은 BlurSigma를 쓴다. 자동 얼굴·직접 가림 모두 긴 변의 8%.
+// 기록: 사각형 20%·얼굴 20% → 얼굴 14%(너무 진함) → 얼굴 8%(09-30, 방송 블랙박스 5~7% 참고)
+// → 사각형도 8%(10-01 사용자 요청). 작은 박스도 minBlurSigma를 지킨다.
+// 가림이 있으면 저장은 모두 Go 파이프(frame.Blur)로 한다. ffmpeg 필터 블러는 미리보기·저장
+// 블러를 한 곳(frame)에서 맞추려고 10-01에 뺐다. ExportSpec은 가림 없는 저장(자르기·소리)만 다룬다.
+// ExportSpec.Start·Duration은 초 단위다.
+
 package media
 
 import (
-	"fmt"
 	"math"
 	"strconv"
-	"strings"
 )
 
-// MaxRects는 한 번에 가릴 수 있는 사각형 개수다.
-const MaxRects = 5
+const MaxRects = 10
 
-// mosaicBlock은 모자이크 한 칸의 크기(원본 픽셀)다.
-const mosaicBlock = 16
+const (
+	blurShare    = 0.08
+	minBlurSigma = 4
+)
 
-// Rect는 레터박스를 뺀 영상 영역 기준 0~1 좌표다.
+// max(minBlurSigma, 긴 변 × blurShare)를 정수 px로 반올림한다.
+func BlurSigma(w, h int) int {
+	return max(minBlurSigma, int(math.Round(float64(max(w, h))*blurShare)))
+}
+
 type Rect struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
@@ -21,15 +33,24 @@ type Rect struct {
 	H float64 `json:"h"`
 }
 
-// PixelRect는 원본 해상도 기준 정수 좌표다. 폭·높이는 짝수.
+type MaskRect struct {
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	W     float64 `json:"w"`
+	H     float64 `json:"h"`
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+}
+
+func (r MaskRect) Box() Rect { return Rect{X: r.X, Y: r.Y, W: r.W, H: r.H} }
+
 type PixelRect struct {
 	X, Y, W, H int
 }
 
-// minRectPx보다 작은 사각형은 실수로 클릭한 것으로 보고 버린다.
 const minRectPx = 4
 
-// ToPixels는 원본 좌표로 바꾼다. 쓸 수 없으면 ok=false.
+// 0~1로 자른 뒤 px로 바꿔 위치는 짝수 내림, 크기는 짝수 올림. minRectPx 미만은 false
 func ToPixels(r Rect, width, height int) (PixelRect, bool) {
 	x0 := clamp(r.X, 0, 1) * float64(width)
 	y0 := clamp(r.Y, 0, 1) * float64(height)
@@ -52,7 +73,6 @@ func ToPixels(r Rect, width, height int) (PixelRect, bool) {
 	return PixelRect{X: x, Y: y, W: w, H: h}, true
 }
 
-// RectsToPixels는 여러 사각형을 변환하고, 쓸 수 없는 것은 뺀다.
 func RectsToPixels(rs []Rect, width, height int) []PixelRect {
 	out := make([]PixelRect, 0, len(rs))
 	for _, r := range rs {
@@ -63,44 +83,15 @@ func RectsToPixels(rs []Rect, width, height int) []PixelRect {
 	return out
 }
 
-// MosaicFilter는 모자이크 필터를 만든다. 출력은 [v].
-func MosaicFilter(rects []PixelRect) string {
-	if len(rects) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("[0:v]split=" + strconv.Itoa(len(rects)+1) + "[base]")
-	for i := range rects {
-		fmt.Fprintf(&b, "[m%d]", i)
-	}
-	for i, r := range rects {
-		sw := max(1, r.W/mosaicBlock)
-		sh := max(1, r.H/mosaicBlock)
-		fmt.Fprintf(&b, ";[m%d]crop=%d:%d:%d:%d,scale=%d:%d,scale=%d:%d:flags=neighbor[p%d]",
-			i, r.W, r.H, r.X, r.Y, sw, sh, r.W, r.H, i)
-	}
-	prev := "base"
-	for i, r := range rects {
-		out := "o" + strconv.Itoa(i)
-		if i == len(rects)-1 {
-			out = "v"
-		}
-		fmt.Fprintf(&b, ";[%s][p%d]overlay=%d:%d[%s]", prev, i, r.X, r.Y, out)
-		prev = out
-	}
-	return b.String()
-}
-
-// ExportSpec은 저장 명령을 만드는 데 필요한 값이다.
 type ExportSpec struct {
 	Source   string
 	Output   string
-	Start    float64 // 초
-	Duration float64 // 초
-	Rects    []PixelRect
+	Start    float64
+	Duration float64
+	Mute     bool
 }
 
-// ExportArgs는 저장용 ffmpeg 인자. yuv420p로 호환성 확보
+// 구간을 잘라 H.264 yuv420p로 인코딩한다.
 func ExportArgs(s ExportSpec) []string {
 	args := []string{
 		"-hide_banner", "-y",
@@ -108,16 +99,11 @@ func ExportArgs(s ExportSpec) []string {
 		"-i", s.Source,
 		"-t", secs(s.Duration),
 	}
-	if f := MosaicFilter(s.Rects); f != "" {
-		args = append(args, "-filter_complex", f, "-map", "[v]")
-	} else {
-		args = append(args, "-map", "0:v:0")
-	}
+	args = append(args, "-map", "0:v:0")
+	args = append(args, audioArgs(s.Mute, 0)...)
 	args = append(args,
-		"-map", "0:a:0?",
 		"-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
 		"-pix_fmt", "yuv420p",
-		"-c:a", "aac", "-b:a", "160k",
 		"-movflags", "+faststart",
 		"-progress", "pipe:1", "-nostats",
 		s.Output,
@@ -125,7 +111,7 @@ func ExportArgs(s ExportSpec) []string {
 	return args
 }
 
-// PreviewArgs는 720p H.264 미리보기용 인자다.
+// 높이 720 이하로 줄여 ultrafast H.264 + AAC로 만든다.
 func PreviewArgs(source, output string) []string {
 	return []string{
 		"-hide_banner", "-y",
@@ -139,6 +125,14 @@ func PreviewArgs(source, output string) []string {
 		"-progress", "pipe:1", "-nostats",
 		output,
 	}
+}
+
+// mute면 -an, 아니면 input번 입력의 첫 소리(없어도 됨)를 AAC로 넣는다.
+func audioArgs(mute bool, input int) []string {
+	if mute {
+		return []string{"-an"}
+	}
+	return []string{"-map", strconv.Itoa(input) + ":a:0?", "-c:a", "aac", "-b:a", "160k"}
 }
 
 func secs(v float64) string { return strconv.FormatFloat(v, 'f', 3, 64) }

@@ -1,6 +1,6 @@
 import {h} from './dom.js';
 
-// 안내 상자. kind: 'info' | 'error' | 'success'
+// kind(info·error·success)를 class로 달고, 글이 비면 숨긴다.
 export function createMessage() {
     const el = h('div.message', {role: 'status', 'aria-live': 'polite', hidden: true});
     return {
@@ -17,7 +17,7 @@ export function createMessage() {
     };
 }
 
-// 편집 화면 위 안내 줄. 결과가 나오면 문구가 바뀐다.
+// set으로 문구를 바꾸고, reset은 처음 내용을 복제해 되돌린다.
 export function createGuide(...defaultContent) {
     const el = h('div.guide-line', {role: 'status', 'aria-live': 'polite'});
     const reset = () => {

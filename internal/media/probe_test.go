@@ -8,7 +8,7 @@ import (
 func TestParseProbe(t *testing.T) {
 	data := `{
 	  "streams": [
-	    {"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"pix_fmt":"yuv420p","duration":"300.2"},
+	    {"codec_type":"video","codec_name":"h264","width":1920,"height":1080,"pix_fmt":"yuv420p","duration":"300.2","avg_frame_rate":"30000/1001","r_frame_rate":"30/1"},
 	    {"codec_type":"audio","codec_name":"aac"}
 	  ],
 	  "format": {"duration":"300.500","bit_rate":"4000000"}
@@ -17,7 +17,7 @@ func TestParseProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Info{Duration: 300.5, Width: 1920, Height: 1080, VideoCodec: "h264", PixFmt: "yuv420p", HasAudio: true, BitRate: 4000000}
+	want := Info{Duration: 300.5, Width: 1920, Height: 1080, VideoCodec: "h264", PixFmt: "yuv420p", HasAudio: true, BitRate: 4000000, FPS: 30000.0 / 1001}
 	if info != want {
 		t.Errorf("got %+v\nwant %+v", info, want)
 	}
@@ -88,6 +88,25 @@ func TestReadProgress(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("got %v want %v", got, want)
+		}
+	}
+}
+
+func TestPickFPS(t *testing.T) {
+	tests := []struct {
+		avg, real string
+		want      float64
+	}{
+		{"30/1", "30/1", 30},
+		{"0/0", "25/1", 25},
+		{"", "", 30},
+		{"120/1", "120/1", 60},
+		{"1/0", "abc", 30},
+		{"29.97", "", 29.97},
+	}
+	for _, tt := range tests {
+		if got := pickFPS(tt.avg, tt.real); got != tt.want {
+			t.Errorf("pickFPS(%q, %q) = %v, want %v", tt.avg, tt.real, got, tt.want)
 		}
 	}
 }

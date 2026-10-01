@@ -96,6 +96,8 @@ b { color: var(--primary-dark); }
     background: var(--info-bg);
     font-size: 21px;
 }
+/* 옆 패널이 있는 화면은 두 줄 높이로 고정해 영상이 안 움직이게 */
+.with-side .guide-line { min-height: 80px; }
 .guide-line.success { background: var(--success-bg); color: var(--success); font-weight: bold; }
 .guide-line.error { background: var(--error-bg); color: var(--error); font-weight: bold; }
 .guide { margin: 0 0 16px; padding-left: 28px; font-size: 21px; }
@@ -127,6 +129,7 @@ b { color: var(--primary-dark); }
 .btn:hover:not(:disabled) { border-color: var(--primary); }
 .btn:focus-visible { outline: 4px solid #93c5fd; outline-offset: 2px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:active:not(:disabled) { transform: translateY(2px); filter: brightness(0.92); }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
 .btn.primary:hover:not(:disabled) { background: var(--primary-dark); border-color: var(--primary-dark); }
 .btn.secondary { background: #fff; color: var(--primary-dark); border-color: var(--primary); }
@@ -153,7 +156,6 @@ b { color: var(--primary-dark); }
 }
 
 /* ── 1단계: 주소 입력 ──────────────────────────── */
-.action-row { display: flex; justify-content: center; margin: 8px 0 16px; }
 .url-row { display: flex; gap: 12px; margin-top: 8px; }
 .url-input {
     flex: 1;
@@ -175,7 +177,34 @@ b { color: var(--primary-dark); }
 }
 .loaded-title, .done-title { font-size: 26px; font-weight: bold; color: var(--success); }
 .loaded-hint { margin-top: 6px; font-weight: bold; }
-.done-actions { display: flex; gap: 16px; margin-top: 12px; }
+.done-card { margin-top: 12px; padding: 12px 20px; }
+.done-card p { margin: 4px 0 0; }
+.done-changed { font-weight: bold; color: var(--end); }
+.done-hint { color: var(--muted); }
+.save-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 12px 0 0; }
+.save-actions-main { display: flex; gap: 16px; }
+
+/* ── 확인 창 ──────────────────────────────────── */
+.modal-backdrop {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(17, 24, 39, 0.55);
+}
+.modal {
+    width: min(640px, calc(100vw - 48px));
+    padding: 28px 32px;
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+.modal-title { margin: 0 0 12px; font-size: 28px; }
+.modal-line { margin: 6px 0; font-size: 22px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 16px; margin-top: 24px; }
+.pick-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; max-height: min(52vh, 420px); overflow-y: auto; padding: 2px; }
+.btn.pick-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 72px; padding: 10px 18px; text-align: left; white-space: normal; flex-shrink: 0; }
+.pick-label { font-size: 22px; font-weight: bold; color: var(--text); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pick-sub { font-size: 18px; font-weight: normal; color: var(--muted); }
+.pick-empty { margin-top: 16px; }
 
 /* ── 안내 문장 ─────────────────────────────────── */
 .message {
@@ -209,7 +238,8 @@ b { color: var(--primary-dark); }
 }
 .player-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
 .mask-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
-.seek-wrap { position: relative; height: 40px; display: flex; align-items: center; }
+.seek-row { display: flex; align-items: center; gap: 16px; }
+.seek-wrap { position: relative; flex: 1; height: 40px; display: flex; align-items: center; }
 .seek-marks { position: absolute; left: 12px; right: 12px; top: 8px; bottom: 8px; pointer-events: none; }
 .seek-selection {
     position: absolute; top: 0; bottom: 0;
@@ -228,7 +258,7 @@ b { color: var(--primary-dark); }
 }
 .player-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .btn.play { min-width: 130px; background: var(--text); border-color: var(--text); color: #fff; }
-.clock { margin-left: auto; font-size: 24px; font-weight: bold; font-variant-numeric: tabular-nums; }
+.clock { white-space: nowrap; font-size: 24px; font-weight: bold; font-variant-numeric: tabular-nums; }
 
 /* ── 2단계: 시작/끝 ───────────────────────────── */
 .mark-row { display: flex; align-items: stretch; gap: 16px; }
@@ -247,8 +277,16 @@ b { color: var(--primary-dark); }
 .mark-card .link { min-height: 28px; padding: 0; }
 
 /* ── 3단계: 가릴 곳 목록 ──────────────────────── */
-.side { width: 250px; flex-shrink: 0; overflow: auto; }
+.side { width: 280px; flex-shrink: 0; overflow: auto; }
 .side .hint { color: var(--muted); font-size: 18px; margin: 0 0 12px; }
+.auto-panel { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--line); }
+.auto-panel h2 { margin: 0; }
+.btn.auto-btn { width: 100%; white-space: normal; min-height: 64px; }
+.btn.auto-toggle { width: 100%; }
+.auto-status { margin: 0; font-size: 18px; color: var(--muted); }
+.btn.sound-btn.on { background: #fff7ed; border-color: var(--end); color: var(--end); }
+.auto-panel .progress { margin-top: 0; }
+.auto-panel .progress-row { flex-wrap: wrap; gap: 8px 16px; }
 .rect-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .rect-list li { display: flex; align-items: center; gap: 10px; font-size: 20px; }
 .rect-list li .btn { margin-left: auto; }
@@ -281,3 +319,19 @@ b { color: var(--primary-dark); }
 .folder-path { word-break: break-all; }
 
 [hidden] { display: none !important; }
+
+/* ── 직접 가림 시간 ─────────────────────────────── */
+.rect-list li.rect-item { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rect-head { display: flex; align-items: center; gap: 10px; }
+.rect-head .btn { margin-left: auto; }
+.rect-time { display: flex; align-items: center; gap: 12px; font-size: 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rect-time.out { color: var(--error); }
+.rect-time .link { min-height: 28px; padding: 0; font-size: 18px; }
+.rect-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rect-actions .btn { flex: 1; margin-left: 0; }
+.rect-spans { position: absolute; inset: 0; }
+.rect-span {
+    position: absolute; bottom: -8px; height: 14px; border-radius: 4px;
+    background: rgba(220, 38, 38, 0.75); color: #fff; font-size: 12px; font-weight: bold; line-height: 14px; padding-left: 4px;
+    overflow: hidden; white-space: nowrap;
+}

@@ -13,22 +13,19 @@ import (
 	"simpleEdit/internal/tools"
 )
 
-// ProgressFunc는 0~1 사이 진행 비율을 받는다.
 type ProgressFunc func(frac float64)
 
-// ErrNoSpace는 디스크 공간 부족으로 ffmpeg가 실패했을 때 반환된다.
 var ErrNoSpace = errors.New("디스크 공간 부족")
 
-// Export는 ffmpeg로 저장한다. 실패하거나 취소되면 미완성 파일을 지운다.
 func Export(ctx context.Context, s ExportSpec, onProgress ProgressFunc) error {
 	return runFFmpeg(ctx, ExportArgs(s), s.Output, s.Duration, onProgress)
 }
 
-// MakePreview는 미리보기용 H.264 파일을 만든다.
 func MakePreview(ctx context.Context, source, output string, duration float64, onProgress ProgressFunc) error {
 	return runFFmpeg(ctx, PreviewArgs(source, output), output, duration, onProgress)
 }
 
+// ffmpeg를 돌리며 진행률을 읽고, 실패·취소면 output을 지운다.
 func runFFmpeg(ctx context.Context, args []string, output string, duration float64, onProgress ProgressFunc) (err error) {
 	cmd := tools.Command(ctx, tools.FFmpeg, args...)
 	stdout, err := cmd.StdoutPipe()
@@ -58,7 +55,7 @@ func runFFmpeg(ctx context.Context, args []string, output string, duration float
 	return nil
 }
 
-// ReadProgress는 out_time_us로 진행률을 알린다.
+// -progress 출력의 out_time_us를 길이로 나눠 알린다. progress=end면 1
 func ReadProgress(r io.Reader, duration float64, onProgress ProgressFunc) {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {

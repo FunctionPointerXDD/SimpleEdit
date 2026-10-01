@@ -1,7 +1,7 @@
 import {h} from './dom.js';
 import {formatRemaining} from '../util/time.js';
 
-// 진행률 막대, 퍼센트, 남은 시간, 취소 버튼
+// update는 percent를 0~100으로 자르고 단계 문구와 남은 시간을 바꾼다.
 export function createProgress({stageText, onCancel}) {
     const label = h('div.progress-label');
     const fill = h('div.progress-fill');

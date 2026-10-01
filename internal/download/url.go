@@ -8,12 +8,11 @@ import (
 	"strings"
 )
 
-// ErrBadURL은 지원하지 않는 주소일 때 반환된다.
 var ErrBadURL = errors.New("유튜브 주소 아님")
 
 var videoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
-// NormalizeURL은 유튜브 주소를 검사해 표준형으로 바꾼다.
+// youtu.be, watch?v=, shorts/, live/에서 11자 ID를 꺼내 watch 주소로 바꾼다.
 func NormalizeURL(raw string) (string, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {

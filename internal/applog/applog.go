@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-const maxSize = 5 << 20 // 5MB를 넘으면 app.old.log로 돌린다
+const maxSize = 5 << 20
 
 var (
 	mu     sync.Mutex
@@ -17,7 +17,7 @@ var (
 	file   *os.File
 )
 
-// Open은 dir\app.log를 열어 이후 기록을 그 파일로 보낸다.
+// app.log가 maxSize를 넘으면 app.old.log로 바꾸고 이어 쓰기로 연다.
 func Open(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -40,7 +40,6 @@ func Open(dir string) error {
 	return nil
 }
 
-// SetOutput은 테스트나 CLI에서 기록 대상을 바꿀 때 쓴다.
 func SetOutput(w io.Writer) {
 	mu.Lock()
 	defer mu.Unlock()

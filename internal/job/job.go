@@ -8,10 +8,8 @@ import (
 	"time"
 )
 
-// ErrBusy는 다른 작업이 실행 중일 때 반환된다.
 var ErrBusy = errors.New("다른 작업 실행 중")
 
-// Manager는 동시에 한 작업만 허용한다.
 type Manager struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -19,7 +17,7 @@ type Manager struct {
 	seq    uint64
 }
 
-// Begin은 새 작업을 시작한다. done은 꼭 불러야 한다.
+// 실행 중이면 ErrBusy. done은 자기 작업일 때만 자리를 비우고 idle을 닫는다.
 func (m *Manager) Begin(parent context.Context) (ctx context.Context, done func(), err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -42,7 +40,6 @@ func (m *Manager) Begin(parent context.Context) (ctx context.Context, done func(
 	}, nil
 }
 
-// Cancel은 실행 중인 작업을 취소한다.
 func (m *Manager) Cancel() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -51,7 +48,7 @@ func (m *Manager) Cancel() {
 	}
 }
 
-// CancelAndWait는 취소 후 정리가 끝나길 기다린다.
+// 취소한 뒤 idle이 닫히길 timeout까지 기다린다. 제때 끝나면 true
 func (m *Manager) CancelAndWait(timeout time.Duration) bool {
 	m.mu.Lock()
 	idle := m.idle
@@ -70,14 +67,12 @@ func (m *Manager) CancelAndWait(timeout time.Duration) bool {
 	}
 }
 
-// Running은 작업이 실행 중인지 알려준다.
 func (m *Manager) Running() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.cancel != nil
 }
 
-// ETA는 진행 비율로 남은 시간을 추정한다.
 type ETA struct {
 	start time.Time
 	now   func() time.Time
@@ -85,7 +80,7 @@ type ETA struct {
 
 func NewETA() *ETA { return &ETA{start: time.Now(), now: time.Now} }
 
-// Remaining은 남은 초. 추정이 이르면 -1.
+// 경과 × 남은 비율 / 진행 비율. 2% 또는 2초 전에는 -1
 func (e *ETA) Remaining(frac float64) float64 {
 	elapsed := e.now().Sub(e.start).Seconds()
 	if frac < 0.02 || elapsed < 2 {
@@ -97,7 +92,6 @@ func (e *ETA) Remaining(frac float64) float64 {
 	return elapsed * (1 - frac) / frac
 }
 
-// Throttle은 interval마다 한 번만 통과시킨다. 1.0은 항상.
 type Throttle struct {
 	interval time.Duration
 	last     time.Time
@@ -108,6 +102,7 @@ func NewThrottle(interval time.Duration) *Throttle {
 	return &Throttle{interval: interval, lastFrac: -1}
 }
 
+// interval이 지났거나 처음으로 1.0에 닿으면 통과시킨다.
 func (t *Throttle) Allow(frac float64) bool {
 	now := time.Now()
 	if frac >= 1 && t.lastFrac < 1 || now.Sub(t.last) >= t.interval {

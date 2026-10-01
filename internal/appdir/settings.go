@@ -6,14 +6,13 @@ import (
 	"path/filepath"
 )
 
-// Settings는 다음 실행 때도 기억할 설정이다.
 type Settings struct {
 	OutputDir string `json:"outputDir"`
 }
 
 func settingsPath() string { return filepath.Join(Base(), "settings.json") }
 
-// LoadSettings는 설정을 읽는다. 없거나 깨지면 빈 값.
+// 파일이 없거나 JSON이 깨지면 빈 설정을 준다.
 func LoadSettings() Settings {
 	var s Settings
 	data, err := os.ReadFile(settingsPath())
@@ -24,7 +23,6 @@ func LoadSettings() Settings {
 	return s
 }
 
-// SaveSettings는 설정을 파일에 쓴다.
 func SaveSettings(s Settings) error {
 	if err := os.MkdirAll(Base(), 0o755); err != nil {
 		return err
@@ -36,7 +34,7 @@ func SaveSettings(s Settings) error {
 	return os.WriteFile(settingsPath(), data, 0o644)
 }
 
-// OutputDirOrDesktop은 저장 폴더. 없으면 바탕화면.
+// 저장 폴더가 비었거나 사라졌으면 바탕화면을 준다.
 func (s Settings) OutputDirOrDesktop() string {
 	if s.OutputDir != "" {
 		if st, err := os.Stat(s.OutputDir); err == nil && st.IsDir() {

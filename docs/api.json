@@ -1,0 +1,383 @@
+{
+  "generated": "go run ./cmd/apispec (-check로 검사). 손으로 고치지 말 것",
+  "notes": {
+    "app.go": [
+      "ExportRequest.Rects는 레터박스를 뺀 영상 영역 기준 0~1 비율 좌표와 원본 기준 켜는 시각(초)이다.",
+      "시각은 저장 구간으로 자르고 프레임 번호(round(초×fps))로 바꾼다. 가림이 있으면 Go 파이프로 저장한다.",
+      "End ≤ Start면 구간 전체로 본다(잘못 와도 덜 가리는 쪽으로 틀리지 않게).",
+      "ProgressEvent.Remaining은 남은 초이고, 아직 모르면 -1이다.",
+      "유튜브 영상 이름은 yt-dlp가 알려 준 제목, 없으면 youtubeName이다. 받은 원본은 7일 보관(appdir.KeepDays).",
+      "VideoInfo.Lowered는 1080p를 못 받아 720p로 받았다는 뜻이다.",
+      "ExportRequest.Overwrite가 true이고 이름·저장 폴더가 마지막 저장과 같으면 그 파일을 새 내용으로 바꾼다.",
+      "그 밖에는 겹치지 않는 새 이름(이름_2.mp4 등)으로 저장한다. 다른 기존 파일은 덮어쓰지 않는다.",
+      "덮어쓸 때는 옆에 임시 파일로 먼저 저장하고 성공하면 바꿔 넣어, 실패·취소해도 기존 파일이 남는다.",
+      "시각·길이(start, end, duration)는 모두 초 단위다. ProgressEvent.Percent는 0~100이다.",
+      "ProgressEvent.Stage: 다운로드는 start·download·merge·convert, 저장은 export, 분석은 analyze"
+    ],
+    "automask_app.go": [
+      "AutoMask.Frames 박스는 [x, y, w, h, 트랙 ID], Tracks는 거르고 남긴 트랙 수다.",
+      "AutoMask는 요청 구간이 아니라 쌓인 분석 범위 전체(Start~Start+Duration)를 준다.",
+      "AnalyzeRequest.Fresh가 false면 이미 분석한 범위는 다시 쓰고 빠진 앞·뒤만 분석한다."
+    ],
+    "errors.go": [
+      "msg* 문장은 \"원인 + 해야 할 일\"을 한 문장으로 쓴다.",
+      "바인딩 메서드가 돌려주는 오류는 항상 이 문장 중 하나이고, 프론트는 그대로 보여 준다.",
+      "취소는 msgCanceled라서 프론트는 이 문장으로 취소를 알아본다."
+    ],
+    "main.go": [
+      "창은 최대화로 시작하고, 주소 칸 오른쪽 클릭 붙여넣기를 위해 기본 메뉴를 켠다."
+    ],
+    "video_serve.go": [
+      "미리보기는 VideoInfo.URL(/video/current?v=버전)로 받는다. 다른 경로는 404다.",
+      "Wails는 Windows에서 응답 본문을 전부 메모리에 모은 뒤 UI 스레드에서 복사한다.",
+      "그래서 \u003cvideo\u003e의 \"bytes=0-\" 요청에 파일 끝까지 주면 긴 영상에서 화면이 멈춘다.",
+      "응답은 한 번에 maxRangeChunk까지만 206으로 주고, 나머지는 브라우저가 이어 요청한다."
+    ]
+  },
+  "methods": [
+    {
+      "name": "Analyze",
+      "doc": "빠진 조각만 차례로 분석해 기존 범위에 붙인다. 빠진 곳이 없으면 바로 준다. 그사이 영상이 바뀌면 버린다.",
+      "params": [
+        "AnalyzeRequest"
+      ],
+      "returns": "AutoMask",
+      "error": true
+    },
+    {
+      "name": "Cancel",
+      "params": [],
+      "error": false
+    },
+    {
+      "name": "ChooseOutputFolder",
+      "doc": "폴더 대화상자에서 고른 경로를 settings.json에 쓴다. 취소하면 현재 폴더",
+      "params": [],
+      "returns": "string",
+      "error": true
+    },
+    {
+      "name": "CloseVideo",
+      "doc": "경로·정보·자동 분석 결과만 비운다. 파일은 지우지 않는다.",
+      "params": [],
+      "error": false
+    },
+    {
+      "name": "DefaultFileName",
+      "params": [],
+      "returns": "string",
+      "error": false
+    },
+    {
+      "name": "Download",
+      "doc": "7일 안에 받은 같은 주소가 있으면 그 파일을 연다(실패하면 새로 받음). 아니면 갱신 대기 → 받기 → load",
+      "params": [
+        "string"
+      ],
+      "returns": "VideoInfo",
+      "error": true
+    },
+    {
+      "name": "Export",
+      "doc": "자동 박스가 있으면 프레임 파이프(Go 블러), 없으면 ffmpeg 필터로 저장",
+      "params": [
+        "ExportRequest"
+      ],
+      "returns": "string",
+      "error": true
+    },
+    {
+      "name": "OpenLocal",
+      "doc": "파일 대화상자에서 고르지 않으면 빈 값, 고르면 새 작업 폴더에서 load한다.",
+      "params": [],
+      "returns": "VideoInfo",
+      "error": true
+    },
+    {
+      "name": "OpenOutputFolder",
+      "doc": "마지막 저장 파일을 탐색기에서 선택한다. 없으면 저장 폴더를 연다.",
+      "params": [],
+      "error": false
+    },
+    {
+      "name": "OpenRecent",
+      "doc": "목록에 있는 id만 받아 그 폴더의 원본을 다시 받지 않고 연다.",
+      "params": [
+        "string"
+      ],
+      "returns": "VideoInfo",
+      "error": true
+    },
+    {
+      "name": "OutputFolder",
+      "params": [],
+      "returns": "string",
+      "error": false
+    },
+    {
+      "name": "RecentVideos",
+      "doc": "최근 받은 영상 목록을 화면용(받은 시각은 유닉스 밀리초)으로 바꾼다.",
+      "params": [],
+      "returns": "RecentVideo[]",
+      "error": false
+    }
+  ],
+  "types": {
+    "AnalyzeRequest": [
+      {
+        "json": "kind",
+        "go": "Kind",
+        "type": "string"
+      },
+      {
+        "json": "start",
+        "go": "Start",
+        "type": "number"
+      },
+      {
+        "json": "end",
+        "go": "End",
+        "type": "number"
+      },
+      {
+        "json": "fresh",
+        "go": "Fresh",
+        "type": "boolean"
+      }
+    ],
+    "AutoMask": [
+      {
+        "json": "kind",
+        "go": "Kind",
+        "type": "string"
+      },
+      {
+        "json": "start",
+        "go": "Start",
+        "type": "number"
+      },
+      {
+        "json": "duration",
+        "go": "Duration",
+        "type": "number"
+      },
+      {
+        "json": "fps",
+        "go": "FPS",
+        "type": "number"
+      },
+      {
+        "json": "found",
+        "go": "Found",
+        "type": "number"
+      },
+      {
+        "json": "tracks",
+        "go": "Tracks",
+        "type": "number"
+      },
+      {
+        "json": "frames",
+        "go": "Frames",
+        "type": "[number, number, number, number, number][][]"
+      }
+    ],
+    "ExportRequest": [
+      {
+        "json": "start",
+        "go": "Start",
+        "type": "number"
+      },
+      {
+        "json": "end",
+        "go": "End",
+        "type": "number"
+      },
+      {
+        "json": "rects",
+        "go": "Rects",
+        "type": "MaskRect[]"
+      },
+      {
+        "json": "fileName",
+        "go": "FileName",
+        "type": "string"
+      },
+      {
+        "json": "auto",
+        "go": "Auto",
+        "type": "string[]"
+      },
+      {
+        "json": "mute",
+        "go": "Mute",
+        "type": "boolean"
+      },
+      {
+        "json": "exclude",
+        "go": "Exclude",
+        "type": "Record\u003cstring, number[]\u003e"
+      },
+      {
+        "json": "overwrite",
+        "go": "Overwrite",
+        "type": "boolean"
+      }
+    ],
+    "MaskRect": [
+      {
+        "json": "x",
+        "go": "X",
+        "type": "number"
+      },
+      {
+        "json": "y",
+        "go": "Y",
+        "type": "number"
+      },
+      {
+        "json": "w",
+        "go": "W",
+        "type": "number"
+      },
+      {
+        "json": "h",
+        "go": "H",
+        "type": "number"
+      },
+      {
+        "json": "start",
+        "go": "Start",
+        "type": "number"
+      },
+      {
+        "json": "end",
+        "go": "End",
+        "type": "number"
+      }
+    ],
+    "ProgressEvent": [
+      {
+        "json": "percent",
+        "go": "Percent",
+        "type": "number"
+      },
+      {
+        "json": "remaining",
+        "go": "Remaining",
+        "type": "number"
+      },
+      {
+        "json": "stage",
+        "go": "Stage",
+        "type": "string"
+      }
+    ],
+    "RecentVideo": [
+      {
+        "json": "id",
+        "go": "ID",
+        "type": "string"
+      },
+      {
+        "json": "title",
+        "go": "Title",
+        "type": "string"
+      },
+      {
+        "json": "duration",
+        "go": "Duration",
+        "type": "number"
+      },
+      {
+        "json": "savedAt",
+        "go": "SavedAt",
+        "type": "number"
+      }
+    ],
+    "VideoInfo": [
+      {
+        "json": "url",
+        "go": "URL",
+        "type": "string"
+      },
+      {
+        "json": "duration",
+        "go": "Duration",
+        "type": "number"
+      },
+      {
+        "json": "width",
+        "go": "Width",
+        "type": "number"
+      },
+      {
+        "json": "height",
+        "go": "Height",
+        "type": "number"
+      },
+      {
+        "json": "name",
+        "go": "Name",
+        "type": "string"
+      },
+      {
+        "json": "reused",
+        "go": "Reused",
+        "type": "boolean"
+      },
+      {
+        "json": "lowered",
+        "go": "Lowered",
+        "type": "boolean"
+      }
+    ]
+  },
+  "events": [
+    {
+      "name": "analyze:progress",
+      "const": "evAnalyzeProgress",
+      "payload": "ProgressEvent"
+    },
+    {
+      "name": "download:progress",
+      "const": "evDownloadProgress",
+      "payload": "ProgressEvent"
+    },
+    {
+      "name": "export:progress",
+      "const": "evExportProgress",
+      "payload": "ProgressEvent"
+    }
+  ],
+  "errors": {
+    "msgAgeLimit": "나이 제한이 있는 영상이라 받을 수 없습니다. 다른 영상 주소를 넣어 주세요.",
+    "msgAnalyzeFail": "자동으로 찾는 중 문제가 생겼습니다. 다시 눌러 주세요.",
+    "msgAutoStale": "자른 구간 일부의 얼굴 찾기가 끝나지 않았습니다. \"이전\"을 눌러 3단계로 돌아가면 나머지를 이어서 찾습니다.",
+    "msgBadRange": "끝 지점이 시작 지점보다 앞에 있습니다. \"여기서 끝\"을 다시 눌러 주세요.",
+    "msgBadURL": "유튜브 영상 주소가 아닙니다. 유튜브에서 주소를 다시 복사해 칸에 붙여넣은 뒤 \"영상 받기\"를 눌러 주세요.",
+    "msgBlocked": "유튜브가 잠시 다운로드를 막았습니다. 몇 분 뒤에 다시 눌러 주세요.",
+    "msgBusy": "다른 작업이 진행 중입니다. 끝날 때까지 기다려 주세요.",
+    "msgCanceled": "작업을 취소했습니다.",
+    "msgDownloadFail": "영상을 받지 못했습니다. 잠시 뒤 다시 눌러 주세요.",
+    "msgExportFail": "영상을 저장하지 못했습니다. 다시 \"저장하기\"를 눌러 주세요.",
+    "msgLive": "생방송 중인 영상은 받을 수 없습니다. 방송이 끝난 뒤 다시 해 주세요.",
+    "msgNameBadChar": "파일 이름에 쓸 수 없는 글자(\\ / : * ? \" \u003c \u003e |)가 있습니다. 지우고 다시 눌러 주세요.",
+    "msgNameEmpty": "파일 이름이 비어 있습니다. 이름을 적은 뒤 다시 눌러 주세요.",
+    "msgNameReserved": "이 이름은 Windows에서 쓸 수 없습니다. 다른 이름을 적어 주세요.",
+    "msgNameTooLong": "파일 이름이 너무 깁니다. 100글자 안으로 줄여 주세요.",
+    "msgNetwork": "영상을 받지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.",
+    "msgNoSpace": "컴퓨터 저장 공간이 부족합니다. 필요 없는 파일을 지운 뒤 다시 눌러 주세요.",
+    "msgNoVideo": "먼저 영상을 불러와 주세요.",
+    "msgNotExtracted": "압축을 풀지 않고 실행하셨습니다. zip 파일을 마우스 오른쪽 버튼으로 눌러 \"압축 풀기\"를 한 뒤, 풀린 폴더의 운전영상편집기.exe를 실행해 주세요.",
+    "msgOpenFail": "이 파일은 열 수 없습니다. 다른 동영상 파일을 골라 주세요.",
+    "msgOverwriteFail": "기존 파일을 새 내용으로 바꾸지 못했습니다. 그 영상을 틀어 둔 프로그램이 있으면 닫은 뒤 다시 눌러 주세요.",
+    "msgPrivate": "비공개 영상이라 받을 수 없습니다. 다른 영상 주소를 넣어 주세요.",
+    "msgRecentGone": "받아 둔 영상을 열 수 없습니다. 7일이 지나 지워졌을 수 있으니 유튜브 주소로 다시 받아 주세요.",
+    "msgRuntimeMiss": "얼굴 찾기에 필요한 Windows 구성 요소(Visual C++ 재배포 가능 패키지)가 없습니다. 설치한 뒤 다시 눌러 주세요.",
+    "msgTooManyRects": "가릴 곳은 10개까지 정할 수 있습니다. 필요 없는 것을 지워 주세요.",
+    "msgTooShort": "자를 구간이 너무 짧습니다. 시작과 끝을 1초 이상 떨어지게 정해 주세요.",
+    "msgToolMissing": "프로그램 파일 일부가 없습니다. 프로그램 폴더를 처음 받은 그대로 다시 풀어 주세요.",
+    "msgUnavailable": "삭제되었거나 볼 수 없는 영상입니다. 다른 영상 주소를 넣어 주세요."
+  }
+}

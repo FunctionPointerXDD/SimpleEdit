@@ -1,3 +1,6 @@
+// Info.Width·Height는 회전을 반영한 크기, Duration은 초, BitRate는 bps(모르면 0)다.
+// FPS는 1~240 밖이면 defaultFPS, 60을 넘으면 maxFPS로 맞춘다.
+
 // Package media는 영상 정보 조회와 ffmpeg 명령을 다룬다.
 package media
 
@@ -7,19 +10,20 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"simpleEdit/internal/tools"
 )
 
-// Info의 Width·Height는 회전을 반영한 크기다.
 type Info struct {
-	Duration   float64 // 초
+	Duration   float64
 	Width      int
 	Height     int
 	VideoCodec string
 	PixFmt     string
 	HasAudio   bool
-	BitRate    int64 // bps, 모르면 0
+	BitRate    int64
+	FPS        float64
 }
 
 type probeJSON struct {
@@ -29,6 +33,8 @@ type probeJSON struct {
 		Width     int               `json:"width"`
 		Height    int               `json:"height"`
 		PixFmt    string            `json:"pix_fmt"`
+		AvgRate   string            `json:"avg_frame_rate"`
+		RealRate  string            `json:"r_frame_rate"`
 		Duration  string            `json:"duration"`
 		Tags      map[string]string `json:"tags"`
 		SideData  []struct {
@@ -44,7 +50,6 @@ type probeJSON struct {
 	} `json:"format"`
 }
 
-// Probe는 ffprobe를 실행해 Info를 반환한다.
 func Probe(ctx context.Context, path string) (Info, error) {
 	out, err := tools.Command(ctx, tools.FFprobe,
 		"-v", "error", "-print_format", "json", "-show_format", "-show_streams", path,
@@ -55,7 +60,7 @@ func Probe(ctx context.Context, path string) (Info, error) {
 	return ParseProbe(out)
 }
 
-// ParseProbe는 ffprobe JSON 출력을 해석한다.
+// 첫 영상 스트림(표지 그림 제외)의 코덱·크기·fps와 소리 유무, 길이를 읽는다.
 func ParseProbe(data []byte) (Info, error) {
 	var p probeJSON
 	if err := json.Unmarshal(data, &p); err != nil {
@@ -72,6 +77,7 @@ func ParseProbe(data []byte) (Info, error) {
 			foundVideo = true
 			info.VideoCodec = s.CodecName
 			info.PixFmt = s.PixFmt
+			info.FPS = pickFPS(s.AvgRate, s.RealRate)
 			info.Width, info.Height = s.Width, s.Height
 			if isQuarterTurn(rotation(s.Tags, s.SideData)) {
 				info.Width, info.Height = info.Height, info.Width
@@ -110,12 +116,42 @@ func rotation(tags map[string]string, side []struct {
 	return 0
 }
 
+const (
+	defaultFPS = 30
+	maxFPS     = 60
+)
+
+// 평균 fps를 우선하고, 이상하면 다음 값, 모두 이상하면 기본값
+func pickFPS(rates ...string) float64 {
+	for _, r := range rates {
+		if v := parseRate(r); v >= 1 && v <= 240 {
+			return min(v, maxFPS)
+		}
+	}
+	return defaultFPS
+}
+
+// "30000/1001" 같은 분수나 소수를 푼다. 분모 0이면 0
+func parseRate(s string) float64 {
+	num, den, ok := strings.Cut(s, "/")
+	if !ok {
+		v, _ := strconv.ParseFloat(s, 64)
+		return v
+	}
+	n, err1 := strconv.ParseFloat(num, 64)
+	d, err2 := strconv.ParseFloat(den, 64)
+	if err1 != nil || err2 != nil || d == 0 {
+		return 0
+	}
+	return n / d
+}
+
 func isQuarterTurn(deg float64) bool {
 	r := math.Mod(math.Abs(math.Round(deg)), 180)
 	return r == 90
 }
 
-// PlayableInWebView는 H.264 8비트 4:2:0인지 본다.
+// H.264이고 yuv420p(또는 yuvj420p)일 때만 true
 func (i Info) PlayableInWebView() bool {
 	if i.VideoCodec != "h264" {
 		return false
