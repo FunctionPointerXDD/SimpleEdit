@@ -1,12 +1,18 @@
 // Options.Step은 몇 프레임마다 검출할지, DetectSize는 검출용 긴 변(px)이다.
 // Result.Found는 거르기 전 검출 수, Stats.Kept는 남긴 트랙 수다.
+// 검출기가 Prepare·Infer를 지원하면(pipelined) 다음 프레임 입력 변환을 이번 프레임 추론과 겹친다.
+// 계산 고루틴 하나가 Infer를 차례로 부르고, 넘기는 채널은 버퍼가 없어 아직 계산 중인 슬롯을
+// 덮어쓰지 않는다(job k를 넘길 수 있으면 같은 슬롯을 쓴 k-2는 이미 끝남). 결과와 순서는 같다.
+// 2026-10-02 측정: 변환 1.0ms가 추론 2.4ms 앞에 차례로 붙어 검출이 그만큼 느렸다.
 
 package automask
 
 import (
 	"context"
+	"errors"
 	"image"
 	"math"
+	"sync/atomic"
 
 	"simpleEdit/internal/detect"
 	"simpleEdit/internal/frame"
@@ -15,6 +21,11 @@ import (
 
 type Detector interface {
 	Detect(f frame.Frame) ([]detect.Box, error)
+}
+
+type pipelined interface {
+	Prepare(slot int, f frame.Frame) (detect.Prepared, error)
+	Infer(p detect.Prepared) ([]detect.Box, error)
 }
 
 type Options struct {
@@ -77,6 +88,7 @@ func Collect(ctx context.Context, s media.PipeSpec, det Detector, o Options, onP
 	total := s.FrameCount()
 	var c Collection
 	var scene sceneDiffs
+	q := newDetectQueue(det, &c)
 	err := media.DecodeFrames(ctx, ds, func(n int, f frame.Frame) error {
 		c.Frames = n + 1
 		scene.add(f)
@@ -86,14 +98,11 @@ func Collect(ctx context.Context, s media.PipeSpec, det Detector, o Options, onP
 		if n%max(1, o.Step) != 0 {
 			return nil
 		}
-		boxes, err := det.Detect(f)
-		if err != nil {
-			return err
-		}
-		c.Found += len(boxes)
-		c.Samples = append(c.Samples, Sample{Frame: n, Dets: normalize(boxes, f.W, f.H)})
-		return nil
+		return q.push(n, f)
 	})
+	if qerr := q.close(); qerr != nil {
+		return Collection{}, qerr
+	}
 	if err != nil {
 		return Collection{}, err
 	}
@@ -157,4 +166,87 @@ func blur(f frame.Frame, r media.Rect, ellipse bool) {
 		return
 	}
 	f.Blur(px, media.BlurSigma(px.Dx(), px.Dy()))
+}
+
+var errDetectStopped = errors.New("검출 중단")
+
+type detectJob struct {
+	n    int
+	p    detect.Prepared
+	w, h int
+}
+
+type detectQueue struct {
+	det    Detector
+	pd     pipelined
+	c      *Collection
+	jobs   chan detectJob
+	done   chan struct{}
+	err    error
+	failed atomic.Bool
+	next   int
+}
+
+// pipelined면 계산 고루틴을 띄우고, 아니면 push가 바로 Detect한다.
+func newDetectQueue(det Detector, c *Collection) *detectQueue {
+	q := &detectQueue{det: det, c: c}
+	if pd, ok := det.(pipelined); ok {
+		q.pd, q.jobs, q.done = pd, make(chan detectJob), make(chan struct{})
+		go q.run()
+	}
+	return q
+}
+
+// 다음 슬롯(0·1 번갈아)에 Prepare해 계산 고루틴에 넘긴다. 계산이 실패했으면 멈추게 한다.
+func (q *detectQueue) push(n int, f frame.Frame) error {
+	if q.pd == nil {
+		boxes, err := q.det.Detect(f)
+		if err != nil {
+			return err
+		}
+		q.add(n, boxes, f.W, f.H)
+		return nil
+	}
+	if q.failed.Load() {
+		return errDetectStopped
+	}
+	p, err := q.pd.Prepare(q.next%2, f)
+	if err != nil {
+		return err
+	}
+	q.next++
+	q.jobs <- detectJob{n: n, p: p, w: f.W, h: f.H}
+	return nil
+}
+
+// 받은 순서대로 Infer한다. 실패한 뒤로는 받기만 해 push가 막히지 않게 한다.
+func (q *detectQueue) run() {
+	defer close(q.done)
+	for j := range q.jobs {
+		if q.err != nil {
+			continue
+		}
+		boxes, err := q.pd.Infer(j.p)
+		if err != nil {
+			q.err = err
+			q.failed.Store(true)
+			continue
+		}
+		q.add(j.n, boxes, j.w, j.h)
+	}
+}
+
+// 남은 계산을 기다리고 계산 오류를 돌려준다.
+func (q *detectQueue) close() error {
+	if q.pd == nil {
+		return nil
+	}
+	close(q.jobs)
+	<-q.done
+	return q.err
+}
+
+func (q *detectQueue) add(n int, boxes []detect.Box, w, h int) {
+	q.c.Found += len(boxes)
+	q.c.Samples = append(q.c.Samples, Sample{Frame: n, Dets: normalize(boxes, w, h)})
 }

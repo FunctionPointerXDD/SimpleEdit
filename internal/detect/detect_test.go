@@ -103,3 +103,14 @@ func TestToFrameScalesAndClips(t *testing.T) {
 }
 
 func near(a, b float32) bool { return math.Abs(float64(a-b)) < 1e-4 }
+
+func BenchmarkLetterbox640x360(b *testing.B) {
+	f := frame.New(640, 360)
+	for i := range f.Pix {
+		f.Pix[i] = byte(i * 7)
+	}
+	dst := make([]float32, 3*640*384)
+	for b.Loop() {
+		Letterbox(f, 640, 0, dst)
+	}
+}

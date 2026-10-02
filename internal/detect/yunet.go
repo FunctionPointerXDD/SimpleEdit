@@ -3,6 +3,9 @@
 // 모델은 2026may(2023mar 가중치를 가변 입력으로 다시 내보낸 것)라 640×360 영상은 640×384로 추론한다.
 // 추론 스레드를 논리 코어 전부로 두면 함께 도는 ffmpeg 디코더와 다퉈 느려진다.
 // 물리 코어 수(논리 ÷ 2)로 두면 2분 1080p 분석이 37초 → 28초였다(Ryzen 5 5625U).
+// 입력 텐서는 2개(슬롯)라 한 슬롯을 Infer하는 동안 다른 슬롯에 Prepare할 수 있다(automask가 씀).
+// 텐서는 프레임 크기가 바뀔 때 새로 만들므로, 동시에 부를 때는 같은 크기 프레임만 넣는다.
+// 세션 2개로 프레임을 나누면 18% 빨랐지만(겹침 효과로 추정, 따로 재지 못함) 하나만 둔다(10-02).
 
 package detect
 
@@ -31,9 +34,16 @@ type FaceDetector struct {
 
 	sess   *ort.DynamicAdvancedSession
 	pw, ph int
-	input  *ort.Tensor[float32]
+	inputs [2]*ort.Tensor[float32]
 	outs   []*ort.Tensor[float32]
 	vals   []ort.Value
+}
+
+type Prepared struct {
+	slot  int
+	scale float32
+	pw    int
+	w, h  int
 }
 
 type yunetOutputs struct {
@@ -60,17 +70,21 @@ func NewFaceDetector(modelPath string) (*FaceDetector, error) {
 	return &FaceDetector{ScoreThreshold: DefaultFaceScore, NMSThreshold: 0.3, sess: sess}, nil
 }
 
-// 캔버스 크기가 바뀔 때만 입력·출력 텐서를 새로 만든다.
+// 캔버스 크기가 바뀔 때만 입력 2개·출력 텐서를 새로 만든다.
 func (d *FaceDetector) tensors(pw, ph int) error {
-	if d.input != nil && d.pw == pw && d.ph == ph {
+	if d.inputs[0] != nil && d.pw == pw && d.ph == ph {
 		return nil
 	}
 	d.freeTensors()
-	in, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 3, int64(ph), int64(pw)))
-	if err != nil {
-		return err
+	for i := range d.inputs {
+		in, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 3, int64(ph), int64(pw)))
+		if err != nil {
+			d.freeTensors()
+			return err
+		}
+		d.inputs[i] = in
 	}
-	d.input, d.pw, d.ph = in, pw, ph
+	d.pw, d.ph = pw, ph
 	for _, kind := range yunetKinds {
 		for _, s := range yunetStrides {
 			n := (pw / s) * (ph / s)
@@ -91,9 +105,11 @@ func (d *FaceDetector) freeTensors() {
 		t.Destroy()
 	}
 	d.outs, d.vals = nil, nil
-	if d.input != nil {
-		d.input.Destroy()
-		d.input = nil
+	for i, in := range d.inputs {
+		if in != nil {
+			in.Destroy()
+			d.inputs[i] = nil
+		}
 	}
 }
 
@@ -121,17 +137,34 @@ func yunetChannels(kind string) int64 {
 	return 1
 }
 
-// letterbox → 추론 → 디코드 → NMS 뒤 원본 좌표로 되돌린다.
+// 슬롯 0에 Prepare한 뒤 바로 Infer한다.
 func (d *FaceDetector) Detect(f frame.Frame) ([]Box, error) {
+	p, err := d.Prepare(0, f)
+	if err != nil {
+		return nil, err
+	}
+	return d.Infer(p)
+}
+
+// 입력 slot(0·1)에 letterbox하고 Infer에 넘길 비율·크기를 돌려준다.
+func (d *FaceDetector) Prepare(slot int, f frame.Frame) (Prepared, error) {
 	if d.sess == nil {
-		return nil, errors.New("닫힌 검출기")
+		return Prepared{}, errors.New("닫힌 검출기")
 	}
 	_, _, _, pw, ph := InputSize(f.W, f.H, yunetLimit)
 	if err := d.tensors(pw, ph); err != nil {
-		return nil, err
+		return Prepared{}, err
 	}
-	scale, _, _ := Letterbox(f, yunetLimit, 0, d.input.GetData())
-	if err := d.sess.Run([]ort.Value{d.input}, d.vals); err != nil {
+	scale, _, _ := Letterbox(f, yunetLimit, 0, d.inputs[slot].GetData())
+	return Prepared{slot: slot, scale: scale, pw: pw, w: f.W, h: f.H}, nil
+}
+
+// p의 슬롯으로 추론 → 디코드 → NMS 뒤 원본 좌표로 되돌린다. 한 번에 하나씩만 부른다.
+func (d *FaceDetector) Infer(p Prepared) ([]Box, error) {
+	if d.sess == nil {
+		return nil, errors.New("닫힌 검출기")
+	}
+	if err := d.sess.Run([]ort.Value{d.inputs[p.slot]}, d.vals); err != nil {
 		return nil, fmt.Errorf("YuNet 추론: %w", err)
 	}
 	var o yunetOutputs
@@ -140,8 +173,8 @@ func (d *FaceDetector) Detect(f frame.Frame) ([]Box, error) {
 		o.obj[i] = d.outs[3+i].GetData()
 		o.bbox[i] = d.outs[6+i].GetData()
 	}
-	boxes := NMS(decodeYuNet(o, pw, d.ScoreThreshold), d.NMSThreshold)
-	return toFrame(boxes, scale, f.W, f.H), nil
+	boxes := NMS(decodeYuNet(o, p.pw, d.ScoreThreshold), d.NMSThreshold)
+	return toFrame(boxes, p.scale, p.w, p.h), nil
 }
 
 func (d *FaceDetector) Close() {

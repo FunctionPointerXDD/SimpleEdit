@@ -278,12 +278,22 @@ const redIn = (fx0, fy0, fx1, fy1) => page.$eval('.mask-canvas', (c, a) => {
     for (let i = 0; i < d.length; i += 4) if (d[i] > 230 && d[i + 1] < 90 && d[i + 2] < 80 && d[i + 3] > 200) n++;
     return n;
 }, {b: box, fx0, fy0, fx1, fy1});
-await page.waitForTimeout(100);
-check('9초: 항상 가림(1번)은 보임', (await redIn(0.08, 0.18, 0.42, 0.52)) > 50);
-check('9초: 5~8초 가림(2번)은 안 보임', (await redIn(0.58, 0.68, 0.92, 0.92)) === 0);
+// 다시 그려질 때까지 50ms마다 세어 보고 2초 안에 맞으면 그 값을 쓴다(0.1초 고정 대기는 가끔 실패함)
+const settleRed = async (ok) => {
+    let v;
+    for (let i = 0; i < 40; i++) {
+        v = [await redIn(0.08, 0.18, 0.42, 0.52), await redIn(0.58, 0.68, 0.92, 0.92)];
+        if (ok(v)) break;
+        await page.waitForTimeout(50);
+    }
+    return v;
+};
+const at9 = await settleRed(([a, b]) => a > 50 && b === 0);
+check('9초: 항상 가림(1번)은 보임', at9[0] > 50, String(at9));
+check('9초: 5~8초 가림(2번)은 안 보임', at9[1] === 0, String(at9));
 await seekTo(6);
-await page.waitForTimeout(100);
-check('6초: 2번도 보임', (await redIn(0.58, 0.68, 0.92, 0.92)) > 50);
+const at6 = await settleRed(([, b]) => b > 50);
+check('6초: 2번도 보임', at6[1] > 50, String(at6));
 await shot('3-rect-time');
 
 // 3단계: 자동 가리기
