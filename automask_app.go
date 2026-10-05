@@ -1,6 +1,8 @@
 // AutoMask.Frames 박스는 [x, y, w, h, 트랙 ID], Tracks는 거르고 남긴 트랙 수다.
 // AutoMask는 요청 구간이 아니라 쌓인 분석 범위 전체(Start~Start+Duration)를 준다.
 // AnalyzeRequest.Fresh가 false면 이미 분석한 범위는 다시 쓰고 빠진 앞·뒤만 분석한다.
+// Kind는 face(YuNet, 타원) 또는 plate(YOLOX, 사각형)다. 진행 단계 이름도 종류마다 다르다.
+// 번호판 모델(bin\models\plate_yolox_tiny.onnx)은 CC BY 4.0 데이터로 학습해 출처를 앱과 함께 둔다.
 
 package main
 
@@ -17,7 +19,12 @@ import (
 	"simpleEdit/internal/tools"
 )
 
-const kindFace = "face"
+const (
+	kindFace  = "face"
+	kindPlate = "plate"
+)
+
+var kindNames = map[string]string{kindFace: "얼굴", kindPlate: "번호판"}
 
 const evAnalyzeProgress = "analyze:progress"
 
@@ -58,7 +65,8 @@ func toAutoMask(kind string, c *automask.Coverage) AutoMask {
 
 // 빠진 조각만 차례로 분석해 기존 범위에 붙인다. 빠진 곳이 없으면 바로 준다. 그사이 영상이 바뀌면 버린다.
 func (a *App) Analyze(req AnalyzeRequest) (AutoMask, error) {
-	if req.Kind != kindFace {
+	name, ok := kindNames[req.Kind]
+	if !ok {
 		return AutoMask{}, userError(msgAnalyzeFail, fmt.Errorf("지원하지 않는 종류: %s", req.Kind))
 	}
 	a.mu.Lock()
@@ -89,28 +97,29 @@ func (a *App) Analyze(req AnalyzeRequest) (AutoMask, error) {
 		return AutoMask{}, analyzeError(err)
 	}
 	defer done()
-	det, err := a.faceDetector()
+	det, opts, err := a.detector(req.Kind, info.FPS)
 	if err != nil {
 		return AutoMask{}, analyzeError(err)
 	}
+	stage := "analyze_" + req.Kind
 	emit := a.progressEmitter(evAnalyzeProgress)
-	emit(0, "analyze")
+	emit(0, stage)
 	total, finished := 0, 0
 	for _, sp := range spans {
 		total += sp.End - sp.First
 	}
 	for _, sp := range spans {
 		s, e := float64(sp.First)/info.FPS, float64(sp.End)/info.FPS
-		applog.Printf("얼굴 분석: %.2f~%.2f초, %.3ffps", s, e, info.FPS)
+		applog.Printf("%s 분석: %.2f~%.2f초, %.3ffps", name, s, e, info.FPS)
 		n := sp.End - sp.First
-		res, err := automask.Analyze(ctx, pipeSpec(source, info, s, e), det, automask.OptionsFor(info.FPS), func(f float64) {
-			emit((float64(finished)+f*float64(n))/float64(total), "analyze")
+		res, err := automask.Analyze(ctx, pipeSpec(source, info, s, e), det, opts, func(f float64) {
+			emit((float64(finished)+f*float64(n))/float64(total), stage)
 		})
 		if err != nil {
 			return AutoMask{}, analyzeError(err)
 		}
-		applog.Printf("얼굴 분석 완료: 프레임 %d개, 검출 %d건, 트랙 %d개 남김·%d개 버림",
-			len(res.Frames), res.Found, res.Stats.Kept, res.Stats.Dropped)
+		applog.Printf("%s 분석 완료: 프레임 %d개, 검출 %d건, 트랙 %d개 남김·%d개 버림",
+			name, len(res.Frames), res.Found, res.Stats.Kept, res.Stats.Dropped)
 		cov.Merge(sp, res)
 		finished += n
 	}
@@ -122,49 +131,71 @@ func (a *App) Analyze(req AnalyzeRequest) (AutoMask, error) {
 	return toAutoMask(req.Kind, cov), nil
 }
 
-// 처음 한 번 파일을 확인해 런타임·모델을 올려 두고, 이후엔 같은 검출기를 쓴다.
-func (a *App) faceDetector() (*detect.FaceDetector, error) {
+// 종류에 맞는 검출기와 분석 설정. 검출기는 처음 한 번만 올리고 이후엔 같은 것을 쓴다.
+func (a *App) detector(kind string, fps float64) (automask.Detector, automask.Options, error) {
 	a.detMu.Lock()
 	defer a.detMu.Unlock()
-	if a.faceDet != nil {
-		return a.faceDet, nil
+	if kind == kindPlate {
+		if a.plateDet == nil {
+			d, err := loadDetector(tools.PlateModel, detect.NewPlateDetector)
+			if err != nil {
+				return nil, automask.Options{}, err
+			}
+			a.plateDet = d
+		}
+		return a.plateDet, automask.PlateOptionsFor(fps), nil
 	}
-	lib, model := tools.ORTLib(), tools.ModelPath(tools.FaceModel)
-	for _, p := range []string{lib, model} {
+	if a.faceDet == nil {
+		d, err := loadDetector(tools.FaceModel, detect.NewFaceDetector)
+		if err != nil {
+			return nil, automask.Options{}, err
+		}
+		a.faceDet = d
+	}
+	return a.faceDet, automask.OptionsFor(fps), nil
+}
+
+// 런타임·모델 파일이 있는지 보고 ONNX 환경을 올린 뒤 open으로 연다.
+func loadDetector[T any](model string, open func(string) (T, error)) (T, error) {
+	var zero T
+	lib, path := tools.ORTLib(), tools.ModelPath(model)
+	for _, p := range []string{lib, path} {
 		if _, err := os.Stat(p); err != nil {
-			return nil, fmt.Errorf("%w: %s", tools.ErrMissing, p)
+			return zero, fmt.Errorf("%w: %s", tools.ErrMissing, p)
 		}
 	}
 	if err := detect.Init(lib); err != nil {
-		return nil, err
+		return zero, err
 	}
-	det, err := detect.NewFaceDetector(model)
-	if err != nil {
-		return nil, err
-	}
-	a.faceDet = det
-	return det, nil
+	return open(path)
 }
 
-// 검출기가 있을 때만 닫고 ONNX 환경까지 해제한다.
+// 열린 검출기를 모두 닫고, 하나라도 있었으면 ONNX 환경까지 해제한다.
 func (a *App) closeDetectors() {
 	a.detMu.Lock()
 	defer a.detMu.Unlock()
+	if a.faceDet == nil && a.plateDet == nil {
+		return
+	}
 	if a.faceDet != nil {
 		a.faceDet.Close()
 		a.faceDet = nil
-		if err := detect.Shutdown(); err != nil {
-			applog.Printf("onnxruntime 정리 실패: %v", err)
-		}
+	}
+	if a.plateDet != nil {
+		a.plateDet.Close()
+		a.plateDet = nil
+	}
+	if err := detect.Shutdown(); err != nil {
+		applog.Printf("onnxruntime 정리 실패: %v", err)
 	}
 }
 
-// 저장 구간의 프레임을 쌓인 범위에서 꺼내 뺀 트랙을 제외해 합친다. 박스가 없으면 nil
-func (a *App) autoFrames(kinds []string, exclude map[string][]int, start, end float64) ([][]media.Rect, error) {
+// 종류마다 저장 구간 프레임을 쌓인 범위에서 꺼내 뺀 트랙을 빼고 층으로 준다. 박스가 없으면 nil
+func (a *App) autoFrames(kinds []string, exclude map[string][]int, start, end float64) ([]automask.AutoLayer, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	count := pipeSpec(a.source, a.info, start, end).FrameCount() + 1
-	merged := make([][]media.Rect, count)
+	var layers []automask.AutoLayer
 	boxes := 0
 	for _, k := range kinds {
 		cov := a.auto[k]
@@ -176,15 +207,16 @@ func (a *App) autoFrames(kinds []string, exclude map[string][]int, start, end fl
 		for _, id := range exclude[k] {
 			skip[id] = true
 		}
-		for n, rs := range automask.Rects(win, skip) {
-			merged[n] = append(merged[n], rs...)
+		frames := automask.Rects(win, skip)
+		for _, rs := range frames {
 			boxes += len(rs)
 		}
+		layers = append(layers, automask.AutoLayer{Frames: frames, Ellipse: k == kindFace})
 	}
 	if boxes == 0 {
 		return nil, nil
 	}
-	return merged, nil
+	return layers, nil
 }
 
 // 시작은 0, 끝은 영상 길이로 자른 뒤 순서와 최소 길이를 검사한다.

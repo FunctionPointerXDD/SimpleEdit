@@ -1,5 +1,11 @@
 // Options.Step은 몇 프레임마다 검출할지, DetectSize는 검출용 긴 변(px)이다.
 // Result.Found는 거르기 전 검출 수, Stats.Kept는 남긴 트랙 수다.
+// 번호판(PlateOptionsFor)은 YOLOX가 얼굴 모델보다 훨씬 무거워(INT8로도 960px 한 장 41ms, YuNet 2.4ms)
+// 초당 10번, 긴 변 960px로 검출한다.
+// 640px은 확실한 번호판(0.7 이상)을 14장면 중 4개만 잡았고 960px은 1280px과 같은 11개였다(10-05).
+// 검출은 0.3까지 받아 트랙을 잇고, 트랙이 남으려면 최고 점수가 크기와 상관없이 0.7 이상이어야 한다.
+// 짧은 트랙(검출 3회 미만, 약 0.3초)은 0.8이 필요하다. 번호판 상자는 꼭 맞아 30%만 키우고 올리지 않는다.
+// AutoLayer는 종류별 프레임 박스이고, Ellipse면 내접 타원(얼굴), 아니면 사각형(번호판)으로 흐린다.
 // 검출기가 Prepare·Infer를 지원하면(pipelined) 다음 프레임 입력 변환을 이번 프레임 추론과 겹친다.
 // 계산 고루틴 하나가 Infer를 차례로 부르고, 넘기는 채널은 버퍼가 없어 아직 계산 중인 슬롯을
 // 덮어쓰지 않는다(job k를 넘길 수 있으면 같은 슬롯을 쓴 k-2는 이미 끝남). 결과와 순서는 같다.
@@ -36,11 +42,13 @@ type Options struct {
 }
 
 const (
-	detectPerSecond = 30
-	maxGapSeconds   = 0.5
-	holdSeconds     = 0.3
-	smoothPosSec    = 0.10
-	smoothSizeSec   = 0.20
+	detectPerSecond      = 30
+	plateDetectPerSecond = 10
+	plateDetectSize      = 960
+	maxGapSeconds        = 0.5
+	holdSeconds          = 0.3
+	smoothPosSec         = 0.10
+	smoothSizeSec        = 0.20
 )
 
 // 초 단위 상수에 fps를 곱해 프레임 수로 바꾼다. 최소 1프레임
@@ -56,6 +64,17 @@ func OptionsFor(fps float64) Options {
 		Track:      t,
 		Scene:      DefaultSceneOptions,
 	}
+}
+
+// OptionsFor를 번호판용 검출 간격·크기·트랙 기준으로 바꾼다.
+func PlateOptionsFor(fps float64) Options {
+	o := OptionsFor(fps)
+	o.Step = max(1, int(math.Round(fps/plateDetectPerSecond)))
+	o.DetectSize = plateDetectSize
+	o.Track.Strong, o.Track.Weak = 0.7, 0.7
+	o.Track.ShortDetections, o.Track.ShortScore = 3, 0.8
+	o.Track.Expand, o.Track.Lift = 0.3, 0
+	return o
 }
 
 type Result struct {
@@ -138,17 +157,24 @@ type ManualRect struct {
 	First, End int
 }
 
-// n번째 프레임에 [First, End) 안인 수동 사각형은 사각형으로, 자동 박스는 타원으로 흐린다.
-func BlurFunc(manual []ManualRect, auto [][]media.Rect) media.FrameFunc {
+type AutoLayer struct {
+	Frames  [][]media.Rect
+	Ellipse bool
+}
+
+// n번째 프레임에 [First, End) 안인 수동 사각형과, 층마다 Ellipse에 따라 자동 박스를 흐린다.
+func BlurFunc(manual []ManualRect, auto []AutoLayer) media.FrameFunc {
 	return func(n int, f frame.Frame) error {
 		for _, m := range manual {
 			if n >= m.First && n < m.End {
 				blur(f, m.Rect, false)
 			}
 		}
-		if n < len(auto) {
-			for _, r := range auto[n] {
-				blur(f, r, true)
+		for _, l := range auto {
+			if n < len(l.Frames) {
+				for _, r := range l.Frames[n] {
+					blur(f, r, l.Ellipse)
+				}
 			}
 		}
 		return nil

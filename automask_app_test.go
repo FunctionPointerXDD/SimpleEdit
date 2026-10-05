@@ -26,8 +26,9 @@ func TestAutoFramesSkipsExcluded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) < 2 || len(got[0]) != 1 || got[0][0].X != 0.5 || len(got[1]) != 0 {
-		t.Errorf("1번 트랙만 빠져야 함: %v", got[:2])
+	f := got[0].Frames
+	if len(got) != 1 || !got[0].Ellipse || len(f[0]) != 1 || f[0][0].X != 0.5 || len(f[1]) != 0 {
+		t.Errorf("1번 트랙만 빠져야 함(얼굴은 타원): %+v", got)
 	}
 }
 
@@ -39,8 +40,8 @@ func TestAutoFramesInsideAnalyzedRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got[0]) != 1 || got[0][0].X != 0.3 {
-		t.Errorf("2초(프레임 60)의 박스가 저장 구간 첫 프레임이어야 함: %v", got[0])
+	if f := got[0].Frames; len(f[0]) != 1 || f[0][0].X != 0.3 {
+		t.Errorf("2초(프레임 60)의 박스가 저장 구간 첫 프레임이어야 함: %v", f[0])
 	}
 }
 
@@ -58,5 +59,19 @@ func TestAutoFramesOutsideRange(t *testing.T) {
 		if _, err := a.autoFrames([]string{kindFace}, nil, r[0], r[1]); err != errStaleAuto {
 			t.Errorf("%v: 분석 범위 밖이면 errStaleAuto, got %v", r, err)
 		}
+	}
+}
+
+func TestAutoFramesLayerPerKind(t *testing.T) {
+	a := appWithFace([][]automask.TrackBox{{{Rect: media.Rect{W: 0.1, H: 0.1}, ID: 1}}})
+	plate := make([][]automask.TrackBox, 60)
+	plate[0] = []automask.TrackBox{{Rect: media.Rect{X: 0.4, W: 0.1, H: 0.05}, ID: 1}}
+	a.auto[kindPlate] = &automask.Coverage{FPS: 30, First: 30, Frames: plate}
+	got, err := a.autoFrames([]string{kindFace, kindPlate}, map[string][]int{kindPlate: {2}}, 1, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || !got[0].Ellipse || got[1].Ellipse || got[1].Frames[0][0].X != 0.4 {
+		t.Errorf("얼굴 층은 타원, 번호판 층은 사각형, 같은 ID라도 종류별로 뺌: %+v", got)
 	}
 }

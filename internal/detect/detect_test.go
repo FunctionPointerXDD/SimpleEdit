@@ -102,8 +102,6 @@ func TestToFrameScalesAndClips(t *testing.T) {
 	}
 }
 
-func near(a, b float32) bool { return math.Abs(float64(a-b)) < 1e-4 }
-
 func BenchmarkLetterbox640x360(b *testing.B) {
 	f := frame.New(640, 360)
 	for i := range f.Pix {
@@ -114,3 +112,24 @@ func BenchmarkLetterbox640x360(b *testing.B) {
 		Letterbox(f, 640, 0, dst)
 	}
 }
+
+func TestDecodeYOLOXGrid(t *testing.T) {
+	const pw, ph = 64, 32
+	out := make([]float32, plateAnchors(pw, ph)*plateOut)
+	put := func(i int, v ...float32) { copy(out[i*plateOut:], v) }
+	put(8+3, 0.5, 0.5, 0, float32(math.Log(2)), 0.9, 0.9)
+	put(32+2, 0.25, 0, float32(math.Log(0.5)), 0, 0.5, 0.5)
+	boxes := decodeYOLOX(out, pw, ph, 0.3)
+	if len(boxes) != 1 {
+		t.Fatalf("점수 0.81 하나만 남아야 함(0.25는 기준 미달): %+v", boxes)
+	}
+	b := boxes[0]
+	if !near(b.X, 24) || !near(b.Y, 4) || !near(b.W, 8) || !near(b.H, 16) || !near(b.Score, 0.81) {
+		t.Errorf("stride 8 칸(3,1): 중심 (28,12), 크기 8×16이어야 함: %+v", b)
+	}
+	if n := plateAnchors(960, 544); n != 120*68+60*34+30*17 {
+		t.Errorf("960×544 칸 수 %d", n)
+	}
+}
+
+func near(a, b float32) bool { return math.Abs(float64(a-b)) < 1e-4 }

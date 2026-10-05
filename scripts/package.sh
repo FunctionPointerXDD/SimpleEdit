@@ -16,6 +16,11 @@ fi
 if [ ! -f "$root/tools/windows/vcruntime140_1.dll" ]; then
   "$root/scripts/fetch-tools.sh" vcrt
 fi
+# 번호판 모델은 직접 학습한 것이라 받아 올 곳이 없다(scripts/plate로 학습 후 넣음)
+if [ ! -f "$root/tools/models/plate_yolox_tiny.onnx" ]; then
+  echo "tools/models/plate_yolox_tiny.onnx가 없습니다 (scripts/plate로 학습한 ONNX를 넣어 주세요)" >&2
+  exit 1
+fi
 command -v x86_64-w64-mingw32-gcc >/dev/null || {
   echo "mingw-w64가 필요합니다: sudo apt install gcc-mingw-w64-x86-64" >&2
   exit 1
@@ -34,7 +39,9 @@ cp "build/bin/simpleEdit.exe" "$out/$name.exe"
 cp tools/windows/yt-dlp.exe tools/windows/ffmpeg.exe tools/windows/ffprobe.exe tools/windows/deno.exe \
   tools/windows/onnxruntime.dll tools/windows/msvcp140.dll tools/windows/msvcp140_1.dll \
   tools/windows/vcruntime140.dll tools/windows/vcruntime140_1.dll "$out/bin/"
-cp tools/models/face_yunet_2026may.onnx "$out/bin/models/"
+cp tools/models/face_yunet_2026may.onnx tools/models/plate_yolox_tiny.onnx "$out/bin/models/"
+# 모델·학습 데이터 출처(CC BY 4.0 표시 의무)
+cp docs/model_notice.txt "$out/bin/models/출처.txt"
 
 if [ "${1:-}" != "--no-zip" ]; then
   rm -f "$root/dist/$name.zip"

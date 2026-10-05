@@ -9,7 +9,10 @@ import (
 
 const ortVersion = "1.29.0"
 
-const FaceModel = "face_yunet_2026may.onnx"
+const (
+	FaceModel  = "face_yunet_2026may.onnx"
+	PlateModel = "plate_yolox_tiny.onnx"
+)
 
 // Windows는 bin\onnxruntime.dll, 그 밖은 bin/libonnxruntime.so.버전
 func ORTLib() string {

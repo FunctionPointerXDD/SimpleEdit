@@ -80,14 +80,16 @@ function installMock({video, meta}) {
         Analyze: async (req) => {
             window.__mock.analyzeReq = req;
             window.__mock.analyzeCount = (window.__mock.analyzeCount || 0) + 1;
-            await fakeProgress('analyze:progress', ['analyze'], 40);
+            await fakeProgress('analyze:progress', [`analyze_${req.kind}`], 40);
             const fps = 30;
-            const prev = !req.fresh && window.__mock.cover;
+            window.__mock.covers = window.__mock.covers || {};
+            const prev = !req.fresh && window.__mock.covers[req.kind];
             const start = prev ? Math.min(prev.start, req.start) : req.start;
             const end = prev ? Math.max(prev.end, req.end) : req.end;
-            window.__mock.cover = {start, end};
+            window.__mock.covers[req.kind] = {start, end};
             const n = Math.round((end - start) * fps);
-            const frames = Array.from({length: n}, (_, i) => [[0.35 + 0.1 * (start + i / fps) / 20, 0.2, 0.2, 0.3, 1]]);
+            const box = (t) => (req.kind === 'plate' ? [0.15, 0.6, 0.1, 0.05, 1] : [0.35 + 0.1 * t / 20, 0.2, 0.2, 0.3, 1]);
+            const frames = Array.from({length: n}, (_, i) => [box(start + i / fps)]);
             return {kind: req.kind, start, duration: end - start, fps, frames, found: n, tracks: 1};
         },
         Export: async (req) => {
@@ -334,6 +336,23 @@ check('꽉 차도 주황 박스 빼기', (await page.textContent('.guide-line'))
 await clickAt(0.45, 0.35);
 for (let i = 0; i < 8; i++) await page.getByRole('button', {name: '지우기'}).first().click();
 check('직접 가림 2개로 되돌림', (await page.$$('.rect-list li:not(.empty)')).length === 2);
+
+// 3단계: 번호판 가리기(얼굴과 따로 분석, 미리보기는 주황 네모)
+const orangeBefore = await orangeCount();
+await click('번호판 가리기');
+await page.waitForSelector('.auto-panel .progress:not([hidden])');
+check('번호판 분석 중 안내', (await page.textContent('.auto-panel .progress')).includes('번호판을 찾는 중'));
+check('번호판 분석 중 얼굴 버튼도 잠김', await page.getByRole('button', {name: '얼굴 다시 찾기'}).isDisabled());
+await page.waitForSelector('.auto-panel .progress', {state: 'hidden'});
+await page.waitForTimeout(200);
+check('번호판 분석 요청 종류', await page.evaluate(() => window.__mock.analyzeReq.kind === 'plate'));
+const orangeWithPlate = await orangeCount();
+check('번호판 주황 네모 추가', orangeWithPlate > orangeBefore + 30, `${orangeBefore} → ${orangeWithPlate}`);
+check('번호판 안내 문장', (await page.textContent('.auto-panel')).includes('주황 네모'));
+await shot('3-plate');
+await click('번호판 가리기 끄기');
+await page.waitForTimeout(100);
+check('번호판 끄면 얼굴만 남음', Math.abs((await orangeCount()) - orangeBefore) < 30, String(await orangeCount()));
 
 // 3단계: 소리 없애기
 check('처음엔 소리 켜짐', await page.evaluate(() => document.querySelector('video').muted === false));

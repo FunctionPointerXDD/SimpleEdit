@@ -30,7 +30,7 @@ func TestDetectSize(t *testing.T) {
 
 func TestBlurFuncUsesFrameBoxes(t *testing.T) {
 	auto := [][]media.Rect{nil, {{X: 0.5, Y: 0, W: 0.5, H: 1}}}
-	fn := BlurFunc([]ManualRect{{Rect: media.Rect{X: 0, Y: 0, W: 0.25, H: 1}, First: 0, End: 3}}, auto)
+	fn := BlurFunc([]ManualRect{{Rect: media.Rect{X: 0, Y: 0, W: 0.25, H: 1}, First: 0, End: 3}}, []AutoLayer{{Frames: auto, Ellipse: true}})
 	for n := 0; n < 3; n++ {
 		f := frame.New(64, 16)
 		for i := range f.Pix {
@@ -94,7 +94,9 @@ type fakePipeline struct {
 	infers    int
 }
 
-func (f *fakePipeline) Detect(fr frame.Frame) ([]detect.Box, error) { return nil, errors.New("쓰지 않음") }
+func (f *fakePipeline) Detect(fr frame.Frame) ([]detect.Box, error) {
+	return nil, errors.New("쓰지 않음")
+}
 
 func (f *fakePipeline) Prepare(slot int, fr frame.Frame) (detect.Prepared, error) {
 	f.mu.Lock()

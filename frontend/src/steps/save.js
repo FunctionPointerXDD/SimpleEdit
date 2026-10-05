@@ -16,6 +16,12 @@ import {state, resetAll, enabledAuto, autoExclusions, rectsForExport} from '../s
 import {formatClock, formatLength} from '../util/time.js';
 
 const STAGE_TEXT = {export: '영상을 저장하는 중입니다…'};
+const AUTO_NAMES = {face: '사람 얼굴', plate: '번호판'};
+
+// 켜진 자동 가림 종류를 "사람 얼굴, 번호판"처럼 잇고, 없으면 "없음"
+function autoSummary() {
+    return enabledAuto().map((k) => AUTO_NAMES[k] || k).join(', ') || '없음';
+}
 
 export const saveStep = {
     title: '저장하기',
@@ -46,7 +52,7 @@ export const saveStep = {
                 h('h1', {}, '영상을 저장합니다'),
                 h('dl.summary', {},
                     h('dt', {}, '자른 구간'), h('dd', {}, `${formatClock(state.start)} ~ ${formatClock(state.end)} (${formatLength(len)})`),
-                    h('dt', {}, '자동 가림'), h('dd', {}, enabledAuto().length ? '사람 얼굴' : '없음'),
+                    h('dt', {}, '자동 가림'), h('dd', {}, autoSummary()),
                     h('dt', {}, '소리'), h('dd', {}, state.mute ? '없앰' : '그대로'),
                     h('dt', {}, '직접 가린 곳'), h('dd', {}, manualCount ? `${manualCount}곳` : '없음'),
                     h('dt', {}, '파일 이름'), h('dd.name-row', {}, nameInput, h('span.ext', {}, '.mp4')),

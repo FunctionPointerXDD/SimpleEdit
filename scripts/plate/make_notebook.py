@@ -39,7 +39,7 @@ def main():
 2. Google 드라이브 **내 드라이브/plate_train** 폴더에 Roboflow에서 받은 COCO zip 파일들을 넣어 둡니다.
    같은 사진을 복사한 데이터셋은 하나만 넣습니다(예: Korea Car License Plate는 hyunjin 것만).
 3. 메뉴 **런타임 → 모두 실행**을 누릅니다. 드라이브 연결을 물으면 허용합니다.
-4. 끝나면 **plate_train/out/plate.onnx**가 생깁니다. 이 파일을 내려받아 전달해 주세요.
+4. 끝나면 **plate_train/out/plate_int8.onnx**(앱용 INT8)와 plate.onnx(FP32)가 생깁니다. 둘 다 내려받아 전달해 주세요.
 
 학습 중 연결이 끊기면 다시 **모두 실행**하면 됩니다. 드라이브에 남은 체크포인트에서 이어서 학습합니다.
 """),
@@ -69,6 +69,8 @@ os.makedirs(f'{DRIVE}/out', exist_ok=True)
         embed("prepare.py"),
         embed("plate_tiny.py"),
         embed("export.py"),
+        embed("detect.py"),
+        embed("quantize.py"),
         code("""
 !test -d /content/plate_data || python prepare.py /content/plate_data {ZIPS} --dedupe
 """),
@@ -82,6 +84,8 @@ print('시작:', start)
 """),
         code("""
 !PYTHONPATH=YOLOX python export.py plate_tiny.py "{DRIVE}/out/plate_tiny/best_ckpt.pth" "{DRIVE}/out/plate.onnx"
+CALIB = ' '.join(shlex.quote(f'{z}:{30 if "korea" in z.lower() else 70}') for z in zips)
+!python quantize.py "{DRIVE}/out/plate.onnx" "{DRIVE}/out/plate_int8.onnx" {CALIB}
 !ls -la "{DRIVE}/out"
 """),
     ]

@@ -40,10 +40,10 @@ type FaceDetector struct {
 }
 
 type Prepared struct {
-	slot  int
-	scale float32
-	pw    int
-	w, h  int
+	slot   int
+	scale  float32
+	pw, ph int
+	w, h   int
 }
 
 type yunetOutputs struct {
@@ -156,7 +156,7 @@ func (d *FaceDetector) Prepare(slot int, f frame.Frame) (Prepared, error) {
 		return Prepared{}, err
 	}
 	scale, _, _ := Letterbox(f, yunetLimit, 0, d.inputs[slot].GetData())
-	return Prepared{slot: slot, scale: scale, pw: pw, w: f.W, h: f.H}, nil
+	return Prepared{slot: slot, scale: scale, pw: pw, ph: ph, w: f.W, h: f.H}, nil
 }
 
 // p의 슬롯으로 추론 → 디코드 → NMS 뒤 원본 좌표로 되돌린다. 한 번에 하나씩만 부른다.
