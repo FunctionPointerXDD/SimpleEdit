@@ -1,6 +1,6 @@
 // MIN_DRAG_PX보다 작게 끈 것은 클릭으로 보고, 그 자리의 자동 박스를 빼거나 되살린다.
 // 가림 표시는 영상 프레임을 저장과 같은 세기(media.BlurSigma, 긴 변 8%)로 흐려 그린다.
-// 자동 얼굴은 저장(frame.BlurEllipse)과 같게 박스에 내접한 타원, 직접 그린 곳은 사각형이다.
+// 자동 얼굴은 저장(frame.BlurEllipse)과 같게 박스에 내접한 타원, 자동 번호판·직접 그린 곳은 사각형이다.
 // 타원은 frame.Feather처럼 바깥 FEATHER 구간을 원형 그라디언트(smoothstep)로 원본과 섞는다.
 // 사각형은 섞지 않고 그 안만 흐린다.
 // 자동 박스는 재생 중 currentTime이 화면 프레임보다 앞서 장면 전환 때 블러가 먼저 보여서,
@@ -106,14 +106,15 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
 
         for (const r of getAuto?.(shownTime()) || []) {
             const [x, y, w, hh] = toPx(r);
+            const ellipse = r.kind === 'face';
             if (r.excluded) {
-                drawExcluded(x, y, w, hh);
+                drawExcluded(x, y, w, hh, ellipse);
                 continue;
             }
-            drawBlurHint(box, r, x, y, w, hh, true);
+            drawBlurHint(box, r, x, y, w, hh, ellipse);
             ctx2d.lineWidth = 3;
             ctx2d.strokeStyle = '#ff9500';
-            shapePath(x, y, w, hh, true);
+            shapePath(x, y, w, hh, ellipse);
             ctx2d.stroke();
         }
         for (const r of getRects(shownTime())) {
@@ -134,11 +135,11 @@ export function createMaskOverlay({video, getRects, getAuto, onAutoClick, canAdd
         }
     }
 
-    function drawExcluded(x, y, w, hh) {
+    function drawExcluded(x, y, w, hh, ellipse) {
         ctx2d.setLineDash([6, 6]);
         ctx2d.lineWidth = 2;
         ctx2d.strokeStyle = 'rgba(200,200,200,0.9)';
-        shapePath(x, y, w, hh, true);
+        shapePath(x, y, w, hh, ellipse);
         ctx2d.stroke();
         ctx2d.setLineDash([]);
         ctx2d.font = 'bold 16px "Malgun Gothic", sans-serif';

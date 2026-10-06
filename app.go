@@ -102,8 +102,9 @@ type App struct {
 	lastDir    string
 	auto       map[string]*automask.Coverage
 
-	detMu   sync.Mutex
-	faceDet *detect.FaceDetector
+	detMu    sync.Mutex
+	faceDet  *detect.FaceDetector
+	plateDet *detect.PlateDetector
 }
 
 func NewApp() *App {
@@ -391,7 +392,7 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	if err != nil {
 		return "", fileNameError(err)
 	}
-	var auto [][]media.Rect
+	var auto []automask.AutoLayer
 	if len(req.Auto) > 0 {
 		if auto, err = a.autoFrames(req.Auto, req.Exclude, start, end); err != nil {
 			return "", userError(msgAutoStale, err)

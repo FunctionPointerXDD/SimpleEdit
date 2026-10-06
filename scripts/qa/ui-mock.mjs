@@ -80,14 +80,16 @@ function installMock({video, meta}) {
         Analyze: async (req) => {
             window.__mock.analyzeReq = req;
             window.__mock.analyzeCount = (window.__mock.analyzeCount || 0) + 1;
-            await fakeProgress('analyze:progress', ['analyze'], 40);
+            await fakeProgress('analyze:progress', [`analyze_${req.kind}`], 40);
             const fps = 30;
-            const prev = !req.fresh && window.__mock.cover;
+            window.__mock.covers = window.__mock.covers || {};
+            const prev = !req.fresh && window.__mock.covers[req.kind];
             const start = prev ? Math.min(prev.start, req.start) : req.start;
             const end = prev ? Math.max(prev.end, req.end) : req.end;
-            window.__mock.cover = {start, end};
+            window.__mock.covers[req.kind] = {start, end};
             const n = Math.round((end - start) * fps);
-            const frames = Array.from({length: n}, (_, i) => [[0.35 + 0.1 * (start + i / fps) / 20, 0.2, 0.2, 0.3, 1]]);
+            const box = (t) => (req.kind === 'plate' ? [0.15, 0.6, 0.1, 0.05, 1] : [0.35 + 0.1 * t / 20, 0.2, 0.2, 0.3, 1]);
+            const frames = Array.from({length: n}, (_, i) => [box(start + i / fps)]);
             return {kind: req.kind, start, duration: end - start, fps, frames, found: n, tracks: 1};
         },
         Export: async (req) => {
@@ -278,12 +280,22 @@ const redIn = (fx0, fy0, fx1, fy1) => page.$eval('.mask-canvas', (c, a) => {
     for (let i = 0; i < d.length; i += 4) if (d[i] > 230 && d[i + 1] < 90 && d[i + 2] < 80 && d[i + 3] > 200) n++;
     return n;
 }, {b: box, fx0, fy0, fx1, fy1});
-await page.waitForTimeout(100);
-check('9초: 항상 가림(1번)은 보임', (await redIn(0.08, 0.18, 0.42, 0.52)) > 50);
-check('9초: 5~8초 가림(2번)은 안 보임', (await redIn(0.58, 0.68, 0.92, 0.92)) === 0);
+// 다시 그려질 때까지 50ms마다 세어 보고 2초 안에 맞으면 그 값을 쓴다(0.1초 고정 대기는 가끔 실패함)
+const settleRed = async (ok) => {
+    let v;
+    for (let i = 0; i < 40; i++) {
+        v = [await redIn(0.08, 0.18, 0.42, 0.52), await redIn(0.58, 0.68, 0.92, 0.92)];
+        if (ok(v)) break;
+        await page.waitForTimeout(50);
+    }
+    return v;
+};
+const at9 = await settleRed(([a, b]) => a > 50 && b === 0);
+check('9초: 항상 가림(1번)은 보임', at9[0] > 50, String(at9));
+check('9초: 5~8초 가림(2번)은 안 보임', at9[1] === 0, String(at9));
 await seekTo(6);
-await page.waitForTimeout(100);
-check('6초: 2번도 보임', (await redIn(0.58, 0.68, 0.92, 0.92)) > 50);
+const at6 = await settleRed(([, b]) => b > 50);
+check('6초: 2번도 보임', at6[1] > 50, String(at6));
 await shot('3-rect-time');
 
 // 3단계: 자동 가리기
@@ -324,6 +336,23 @@ check('꽉 차도 주황 박스 빼기', (await page.textContent('.guide-line'))
 await clickAt(0.45, 0.35);
 for (let i = 0; i < 8; i++) await page.getByRole('button', {name: '지우기'}).first().click();
 check('직접 가림 2개로 되돌림', (await page.$$('.rect-list li:not(.empty)')).length === 2);
+
+// 3단계: 번호판 가리기(얼굴과 따로 분석, 미리보기는 주황 네모)
+const orangeBefore = await orangeCount();
+await click('번호판 가리기');
+await page.waitForSelector('.auto-panel .progress:not([hidden])');
+check('번호판 분석 중 안내', (await page.textContent('.auto-panel .progress')).includes('번호판을 찾는 중'));
+check('번호판 분석 중 얼굴 버튼도 잠김', await page.getByRole('button', {name: '얼굴 다시 찾기'}).isDisabled());
+await page.waitForSelector('.auto-panel .progress', {state: 'hidden'});
+await page.waitForTimeout(200);
+check('번호판 분석 요청 종류', await page.evaluate(() => window.__mock.analyzeReq.kind === 'plate'));
+const orangeWithPlate = await orangeCount();
+check('번호판 주황 네모 추가', orangeWithPlate > orangeBefore + 30, `${orangeBefore} → ${orangeWithPlate}`);
+check('번호판 안내 문장', (await page.textContent('.auto-panel')).includes('주황 네모'));
+await shot('3-plate');
+await click('번호판 가리기 끄기');
+await page.waitForTimeout(100);
+check('번호판 끄면 얼굴만 남음', Math.abs((await orangeCount()) - orangeBefore) < 30, String(await orangeCount()));
 
 // 3단계: 소리 없애기
 check('처음엔 소리 켜짐', await page.evaluate(() => document.querySelector('video').muted === false));

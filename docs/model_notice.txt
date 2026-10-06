@@ -1,0 +1,13 @@
+운전영상편집기 - 자동 가리기 모델과 학습 데이터 출처
+
+[얼굴] face_yunet_2026may.onnx
+  YuNet, OpenCV Zoo (https://github.com/opencv/opencv_zoo), MIT License
+
+[번호판] plate_yolox_tiny.onnx
+  모델 구조와 학습 코드: YOLOX (https://github.com/Megvii-BaseDetection/YOLOX), Apache License 2.0
+  COCO 사전학습 가중치 yolox_tiny.pth에서 번호판 1종류로 이어 학습했습니다.
+  학습 데이터 (모두 CC BY 4.0, https://creativecommons.org/licenses/by/4.0/):
+  - "Vehicle Registration Plates" (LicensePlateDatasetv1), Augmented Startups, Roboflow Universe
+  - "Korea Car License Plate", hyunjin, Roboflow Universe
+    https://universe.roboflow.com/hyunjin/korea-car-license-plate
+  데이터는 원본에서 같은 사진의 증강 사본을 빼고 사용했으며, 번호판 종류를 하나로 합쳤습니다.

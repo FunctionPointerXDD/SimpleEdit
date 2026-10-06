@@ -1,8 +1,15 @@
+// fakePipeline은 Prepare한 슬롯을 차례로 쌓고 Infer가 앞에서 꺼낸다.
+// 계산 중인 슬롯에 Prepare하면 overwrite로 기록해 겹치기가 슬롯을 덮어쓰는지 본다.
+
 package automask
 
 import (
+	"errors"
+	"sync"
 	"testing"
+	"time"
 
+	"simpleEdit/internal/detect"
 	"simpleEdit/internal/frame"
 	"simpleEdit/internal/media"
 )
@@ -23,7 +30,7 @@ func TestDetectSize(t *testing.T) {
 
 func TestBlurFuncUsesFrameBoxes(t *testing.T) {
 	auto := [][]media.Rect{nil, {{X: 0.5, Y: 0, W: 0.5, H: 1}}}
-	fn := BlurFunc([]ManualRect{{Rect: media.Rect{X: 0, Y: 0, W: 0.25, H: 1}, First: 0, End: 3}}, auto)
+	fn := BlurFunc([]ManualRect{{Rect: media.Rect{X: 0, Y: 0, W: 0.25, H: 1}, First: 0, End: 3}}, []AutoLayer{{Frames: auto, Ellipse: true}})
 	for n := 0; n < 3; n++ {
 		f := frame.New(64, 16)
 		for i := range f.Pix {
@@ -74,5 +81,91 @@ func TestOptionsFor(t *testing.T) {
 	}
 	if o60.Step != 2 || o60.Track.MaxGap != 30 || o60.Track.Hold != 18 {
 		t.Errorf("60fps: %+v", o60)
+	}
+}
+
+type fakePipeline struct {
+	mu        sync.Mutex
+	queue     []int
+	pixels    []byte
+	busy      int
+	overwrite bool
+	failAt    int
+	infers    int
+}
+
+func (f *fakePipeline) Detect(fr frame.Frame) ([]detect.Box, error) {
+	return nil, errors.New("쓰지 않음")
+}
+
+func (f *fakePipeline) Prepare(slot int, fr frame.Frame) (detect.Prepared, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if slot == f.busy {
+		f.overwrite = true
+	}
+	f.queue = append(f.queue, slot)
+	f.pixels = append(f.pixels, fr.Pix[0])
+	return detect.Prepared{}, nil
+}
+
+func (f *fakePipeline) Infer(detect.Prepared) ([]detect.Box, error) {
+	f.mu.Lock()
+	f.busy, f.queue = f.queue[0], f.queue[1:]
+	v := f.pixels[0]
+	f.pixels = f.pixels[1:]
+	f.infers++
+	n := f.infers
+	f.mu.Unlock()
+	time.Sleep(2 * time.Millisecond)
+	f.mu.Lock()
+	f.busy = -1
+	f.mu.Unlock()
+	if n == f.failAt {
+		return nil, errors.New("추론 실패")
+	}
+	return []detect.Box{{X: float32(v), W: 1, H: 1, Score: 1}}, nil
+}
+
+func TestDetectQueuePipelinesInOrder(t *testing.T) {
+	fp := &fakePipeline{busy: -1}
+	var c Collection
+	q := newDetectQueue(fp, &c)
+	for n := 0; n < 20; n++ {
+		f := frame.New(10, 10)
+		f.Pix[0] = byte(n)
+		if err := q.push(n, f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := q.close(); err != nil {
+		t.Fatal(err)
+	}
+	if fp.overwrite {
+		t.Error("계산 중인 슬롯에 다음 프레임을 덮어씀")
+	}
+	if len(c.Samples) != 20 || c.Found != 20 {
+		t.Fatalf("샘플 %d개, 검출 %d건", len(c.Samples), c.Found)
+	}
+	for n, s := range c.Samples {
+		if s.Frame != n || s.Dets[0].Box.X*10 != float64(n) {
+			t.Fatalf("%d번 순서·내용이 바뀜: %+v", n, s)
+		}
+	}
+}
+
+func TestDetectQueueStopsOnInferError(t *testing.T) {
+	fp := &fakePipeline{busy: -1, failAt: 3}
+	var c Collection
+	q := newDetectQueue(fp, &c)
+	var pushErr error
+	for n := 0; n < 50 && pushErr == nil; n++ {
+		pushErr = q.push(n, frame.New(4, 4))
+	}
+	if err := q.close(); err == nil || err.Error() != "추론 실패" {
+		t.Fatalf("추론 오류를 돌려줘야 함: %v", err)
+	}
+	if !errors.Is(pushErr, errDetectStopped) {
+		t.Errorf("실패 뒤 push는 멈춰야 함: %v", pushErr)
 	}
 }

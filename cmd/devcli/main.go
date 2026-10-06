@@ -54,7 +54,11 @@ func main() {
 		err = export(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]), os.Args[6:])
 	case "analyze":
 		need(6)
-		err = analyze(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]))
+		kind := "face"
+		if len(os.Args) > 6 {
+			kind = os.Args[6]
+		}
+		err = analyze(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]), kind)
 	case "facecheck":
 		need(5)
 		gtScore := float32(0.6)
@@ -112,7 +116,7 @@ func export(ctx context.Context, src, out string, start, end float64, rectArgs [
 	return err
 }
 
-func analyze(ctx context.Context, src, out string, start, end float64) error {
+func analyze(ctx context.Context, src, out string, start, end float64, kind string) error {
 	info, err := media.Probe(ctx, src)
 	if err != nil {
 		return err
@@ -120,14 +124,14 @@ func analyze(ctx context.Context, src, out string, start, end float64) error {
 	if err := detect.Init(tools.ORTLib()); err != nil {
 		return err
 	}
-	det, err := detect.NewFaceDetector(tools.ModelPath(tools.FaceModel))
+	det, opts, err := detectorFor(kind, info.FPS)
 	if err != nil {
 		return err
 	}
 	defer det.Close()
 	spec := media.PipeSpec{Source: src, Start: start, Duration: end - start, FPS: info.FPS, Width: info.Width, Height: info.Height}
 	t0 := time.Now()
-	res, err := automask.Analyze(ctx, spec, det, automask.OptionsFor(info.FPS), func(f float64) { fmt.Printf("\r분석 %5.1f%%   ", f*100) })
+	res, err := automask.Analyze(ctx, spec, det, opts, func(f float64) { fmt.Printf("\r분석 %5.1f%%   ", f*100) })
 	fmt.Println()
 	if err != nil {
 		return err
@@ -144,12 +148,30 @@ func analyze(ctx context.Context, src, out string, start, end float64) error {
 		return err
 	}
 	t1 := time.Now()
-	err = media.ProcessFrames(ctx, spec, out, automask.BlurFunc(nil, automask.Rects(res.Frames, nil)), func(f float64) { fmt.Printf("\r저장 %5.1f%%   ", f*100) })
+	err = media.ProcessFrames(ctx, spec, out, automask.BlurFunc(nil, []automask.AutoLayer{{Frames: automask.Rects(res.Frames, nil), Ellipse: kind == "face"}}), func(f float64) { fmt.Printf("\r저장 %5.1f%%   ", f*100) })
 	fmt.Println()
 	if err == nil {
 		fmt.Printf("저장 %.1f초: %s\n", time.Since(t1).Seconds(), out)
 	}
 	return err
+}
+
+type closingDetector interface {
+	automask.Detector
+	Close()
+}
+
+// face면 YuNet과 OptionsFor, plate면 YOLOX와 PlateOptionsFor
+func detectorFor(kind string, fps float64) (closingDetector, automask.Options, error) {
+	switch kind {
+	case "face":
+		d, err := detect.NewFaceDetector(tools.ModelPath(tools.FaceModel))
+		return d, automask.OptionsFor(fps), err
+	case "plate":
+		d, err := detect.NewPlateDetector(tools.ModelPath(tools.PlateModel))
+		return d, automask.PlateOptionsFor(fps), err
+	}
+	return nil, automask.Options{}, fmt.Errorf("종류는 face 또는 plate: %q", kind)
 }
 
 func parseRects(args []string, info media.Info) ([]media.PixelRect, error) {
@@ -183,7 +205,7 @@ func usage() {
   devcli download <URL> <작업폴더> [취소초]
   devcli probe <파일>
   devcli export <원본> <출력> <시작초> <끝초> [x,y,w,h ...]
-  devcli analyze <원본> <출력> <시작초> <끝초>
+  devcli analyze <원본> <출력> <시작초> <끝초> [face|plate]
   devcli facecheck <원본> <시작초> <끝초> [정답 점수=0.6]
   devcli cancel <원본> <출력> <초>
   devcli update`)
