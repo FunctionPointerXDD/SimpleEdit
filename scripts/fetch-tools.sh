@@ -66,6 +66,10 @@ ml)
   fetch_checked https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2026may.onnx \
     "$root/tools/models/face_yunet_2026may.onnx" \
     ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0
+  echo "VitTrack 추적 모델 받는 중 (OpenCV Zoo, Apache-2.0)"
+  fetch_checked https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/object_tracking_vittrack/object_tracking_vittrack_2023sep.onnx \
+    "$root/tools/models/object_tracking_vittrack_2023sep.onnx" \
+    2990f0b7cd44d92afa48cd97db6de7be113fc1d9594fddb74e2725c10478e91d
   ln -sfn ../models "$root/tools/linux/models"
   out="$root/tools/models"
   ;;

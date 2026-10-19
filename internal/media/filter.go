@@ -1,5 +1,6 @@
 // Rect는 레터박스를 뺀 영상 영역 기준 0~1 좌표, PixelRect는 원본 px(짝수)다.
 // MaskRect.Start·End는 직접 가림을 켤 원본 기준 초다(화면이 자른 구간 전체로 채워 보냄).
+// MaskRect.Track이 0이 아니면 App.Track이 돌려준 추적 번호이고, 상자는 프레임마다 그 경로를 따른다.
 // 블러 세기는 저장(Go 프레임)과 미리보기가 같은 BlurSigma를 쓴다. 자동 얼굴·직접 가림 모두 긴 변의 8%.
 // 기록: 사각형 20%·얼굴 20% → 얼굴 14%(너무 진함) → 얼굴 8%(09-30, 방송 블랙박스 5~7% 참고)
 // → 사각형도 8%(10-01 사용자 요청). 작은 박스도 minBlurSigma를 지킨다.
@@ -40,6 +41,7 @@ type MaskRect struct {
 	H     float64 `json:"h"`
 	Start float64 `json:"start"`
 	End   float64 `json:"end"`
+	Track int     `json:"track"`
 }
 
 func (r MaskRect) Box() Rect { return Rect{X: r.X, Y: r.Y, W: r.W, H: r.H} }

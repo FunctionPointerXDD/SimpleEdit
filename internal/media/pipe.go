@@ -148,6 +148,11 @@ func DecodeFrames(ctx context.Context, s PipeSpec, fn FrameFunc) error {
 	return decodeFrames(ctx, s, frame.BGR, fn)
 }
 
+// yuv420p로 decodeFrames
+func DecodeYUV(ctx context.Context, s PipeSpec, fn FrameFunc) error {
+	return decodeFrames(ctx, s, frame.YUV420, fn)
+}
+
 // 읽기 고루틴과 버퍼 pipeBuffers개를 돌려 쓰고, fn이 실패하면 디코더를 취소한다.
 func decodeFrames(ctx context.Context, s PipeSpec, format frame.Format, fn FrameFunc) error {
 	ctx, cancel := context.WithCancel(ctx)

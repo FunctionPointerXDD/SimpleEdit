@@ -25,3 +25,5 @@ export function OpenRecent(arg1:string):Promise<main.VideoInfo>;
 export function OutputFolder():Promise<string>;
 
 export function RecentVideos():Promise<Array<main.RecentVideo>>;
+
+export function Track(arg1:main.TrackRequest):Promise<main.TrackResult>;

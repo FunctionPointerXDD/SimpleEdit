@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"simpleEdit/internal/automask"
 	"simpleEdit/internal/media"
 )
 
@@ -50,7 +51,10 @@ func TestManualRectsFrames(t *testing.T) {
 	whole.Start, whole.End = 10, 20
 	part.Start, part.End = 12, 13.5
 	outside.Start, outside.End = 21, 25
-	manual := manualRects([]media.MaskRect{whole, part, outside, unset}, 10, 20, 30)
+	manual, err := manualRects([]media.MaskRect{whole, part, outside, unset}, 10, 20, 30, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(manual) != 3 {
 		t.Fatalf("구간 밖 사각형만 빠져야 함: %d", len(manual))
 	}
@@ -62,5 +66,29 @@ func TestManualRectsFrames(t *testing.T) {
 	}
 	if m := manual[2]; m.First != 0 || m.End != 300 {
 		t.Errorf("시각이 없으면 구간 전체: %+v", m)
+	}
+}
+
+func TestManualRectsFollowPath(t *testing.T) {
+	boxes := make([]media.Rect, 90)
+	for i := range boxes {
+		boxes[i] = media.Rect{X: float64(i) / 100, W: 0.1, H: 0.1}
+	}
+	paths := map[int]*automask.Path{3: {First: 330, Boxes: boxes}}
+	r := media.MaskRect{W: 0.1, H: 0.1, Start: 10, End: 20, Track: 3}
+	manual, err := manualRects([]media.MaskRect{r}, 10, 20, 30, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := manual[0]
+	if m.First != 30 || m.End != 120 || len(m.Path) != 90 || m.Path[0].X != 0 {
+		t.Errorf("경로(프레임 330~419)는 저장 구간 30~119번 프레임: %d~%d, %d개", m.First, m.End, len(m.Path))
+	}
+	cut, _ := manualRects([]media.MaskRect{r}, 12, 20, 30, paths)
+	if c := cut[0]; c.First != 0 || len(c.Path) != 60 || c.Path[0].X != 0.3 {
+		t.Errorf("구간을 12초부터 자르면 경로 30번째 상자부터: %d, %d개, %v", c.First, len(c.Path), c.Path[0])
+	}
+	if _, err := manualRects([]media.MaskRect{{Track: 9, Start: 10, End: 20}}, 10, 20, 30, paths); err == nil {
+		t.Error("없는 추적 번호면 오류")
 	}
 }

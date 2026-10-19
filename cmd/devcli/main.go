@@ -59,6 +59,9 @@ func main() {
 			kind = os.Args[6]
 		}
 		err = analyze(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]), kind)
+	case "track":
+		need(8)
+		err = track(ctx, os.Args[2], os.Args[3], num(os.Args[4]), num(os.Args[5]), num(os.Args[6]), os.Args[7])
 	case "facecheck":
 		need(5)
 		gtScore := float32(0.6)
@@ -156,6 +159,40 @@ func analyze(ctx context.Context, src, out string, start, end float64, kind stri
 	return err
 }
 
+// 그린 시각의 상자를 앞뒤로 따라가 그 경로로만 흐린 영상을 저장한다.
+func track(ctx context.Context, src, out string, start, end, at float64, rectArg string) error {
+	info, err := media.Probe(ctx, src)
+	if err != nil {
+		return err
+	}
+	rects, err := parseRects([]string{rectArg}, info)
+	if err != nil || len(rects) == 0 {
+		return fmt.Errorf("상자가 너무 작거나 형식이 틀림: %q", rectArg)
+	}
+	if err := detect.Init(tools.ORTLib()); err != nil {
+		return err
+	}
+	tr, err := detect.NewTracker(tools.ModelPath(tools.TrackModel))
+	if err != nil {
+		return err
+	}
+	defer tr.Close()
+	r := rects[0]
+	spec := media.PipeSpec{Source: src, Start: start, Duration: end - start, FPS: info.FPS, Width: info.Width, Height: info.Height}
+	t0 := time.Now()
+	p, err := automask.Follow(ctx, spec, tr, automask.FrameAt(at, info.FPS), detect.PixelBox{X: r.X, Y: r.Y, W: r.W, H: r.H},
+		func(f float64) { fmt.Printf("\r추적 %5.1f%%   ", f*100) })
+	fmt.Println()
+	if err != nil {
+		return err
+	}
+	base := automask.FrameAt(start, info.FPS)
+	fmt.Printf("추적 %.1f초: %.2f~%.2f초(%d프레임), 앞 놓침 %v, 뒤 놓침 %v\n", time.Since(t0).Seconds(),
+		float64(p.First)/info.FPS, float64(p.First+len(p.Boxes))/info.FPS, len(p.Boxes), p.LostBefore, p.LostAfter)
+	m := automask.ManualRect{First: p.First - base, End: p.First - base + len(p.Boxes), Path: p.Boxes}
+	return media.ProcessFrames(ctx, spec, out, automask.BlurFunc([]automask.ManualRect{m}, nil), nil)
+}
+
 type closingDetector interface {
 	automask.Detector
 	Close()
@@ -206,6 +243,7 @@ func usage() {
   devcli probe <파일>
   devcli export <원본> <출력> <시작초> <끝초> [x,y,w,h ...]
   devcli analyze <원본> <출력> <시작초> <끝초> [face|plate]
+  devcli track <원본> <출력> <시작초> <끝초> <그린초> x,y,w,h
   devcli facecheck <원본> <시작초> <끝초> [정답 점수=0.6]
   devcli cancel <원본> <출력> <초>
   devcli update`)

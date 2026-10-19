@@ -132,4 +132,59 @@ func TestDecodeYOLOXGrid(t *testing.T) {
 	}
 }
 
+func TestDropTallPlates(t *testing.T) {
+	boxes := []Box{{H: 54, Score: 0.9}, {H: 55, Score: 0.8}, {H: 40, Score: 0.7}}
+	got := dropTall(boxes, 540)
+	if len(got) != 2 || got[0].Score != 0.9 || got[1].Score != 0.7 {
+		t.Errorf("540px 화면에서 높이 54 이하만 남아야 함: %+v", got)
+	}
+}
+
 func near(a, b float32) bool { return math.Abs(float64(a-b)) < 1e-4 }
+
+func TestTrackCropAndBox(t *testing.T) {
+	f := frame.New(100, 50)
+	for i := range f.Pix {
+		f.Pix[i] = 200
+	}
+	dst := make([]float32, 3*16*16)
+	crop := cropResize(f, PixelBox{X: 90, Y: 40, W: 8, H: 8}, 2, 16, dst)
+	if crop != 16 {
+		t.Fatalf("√(8·8)×2 = 16칸이어야 함: %d", crop)
+	}
+	zero := (0 - trackMean[0]*255) / (trackStd[0] * 255)
+	if !near(dst[0], (200-trackMean[0]*255)/(trackStd[0]*255)) || !near(dst[15], zero) || !near(dst[15*16], zero) {
+		t.Errorf("그림 안은 값, 오른쪽·아래 밖(끝 한 줄 포함)은 0이어야 함: %v %v %v", dst[0], dst[15], dst[15*16])
+	}
+	got := nextBox(PixelBox{X: 100, Y: 100, W: 20, H: 10}, 0.5, 0.5, 0.25, 0.125, 64)
+	if got != (PixelBox{X: 102, Y: 101, W: 16, H: 8}) {
+		t.Errorf("자른 칸 기준 가운데 0.25×0.125 상자 → 원본 %+v", got)
+	}
+	h := hann2d()
+	if h[0] >= h[8*16+8] || !near(h[8*16+7], h[7*16+8]) {
+		t.Errorf("Hanning 창은 가운데가 크고 대칭이어야 함")
+	}
+}
+
+func TestTrackSaneRejectsBlowUp(t *testing.T) {
+	first := PixelBox{X: 400, Y: 700, W: 56, H: 24}
+	last := PixelBox{X: 700, Y: 720, W: 30, H: 14}
+	cases := []struct {
+		next PixelBox
+		ok   bool
+	}{
+		{PixelBox{X: 702, Y: 721, W: 31, H: 14}, true},
+		{PixelBox{X: 630, Y: 582, W: 773, H: 255}, false},
+		{PixelBox{X: 700, Y: 720, W: 20, H: 10}, false},
+		{PixelBox{X: 1950, Y: 720, W: 30, H: 14}, false},
+		{PixelBox{X: 700, Y: 720, W: 0, H: 14}, false},
+	}
+	for _, c := range cases {
+		if got := sane(c.next, last, first, 1920, 1080); got != c.ok {
+			t.Errorf("%+v: %v, want %v", c.next, got, c.ok)
+		}
+	}
+	if sane(PixelBox{W: 170, H: 72}, PixelBox{W: 160, H: 70}, first, 1920, 1080) {
+		t.Error("처음보다 9배 넘게 커지면 놓침")
+	}
+}

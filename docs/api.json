@@ -29,6 +29,13 @@
     "main.go": [
       "창은 최대화로 시작하고, 주소 칸 오른쪽 클릭 붙여넣기를 위해 기본 메뉴를 켠다."
     ],
+    "track_app.go": [
+      "Track은 3단계 직접 가림 하나를 그린 시각(Time)에서 자른 구간 [Start, End) 안으로 앞뒤 추적한다.",
+      "결과 경로는 App.paths에 번호로 두고(영상을 닫거나 바꾸면 비움), 화면에는 같은 번호와 상자들을 준다.",
+      "TrackResult.Frames는 Start초부터 1/FPS 간격의 [x, y, w, h](0~1, 소수 4자리)다.",
+      "LostStart·LostEnd는 앞·뒤에서 놓쳐 멈췄는지다(false면 자른 구간 끝까지 따라감).",
+      "저장할 때 MaskRect.Track으로 이 번호를 보내면 프레임마다 경로 상자로 가린다."
+    ],
     "video_serve.go": [
       "미리보기는 VideoInfo.URL(/video/current?v=버전)로 받는다. 다른 경로는 404다.",
       "Wails는 Windows에서 응답 본문을 전부 메모리에 모은 뒤 UI 스레드에서 복사한다.",
@@ -122,6 +129,15 @@
       "params": [],
       "returns": "RecentVideo[]",
       "error": false
+    },
+    {
+      "name": "Track",
+      "doc": "상자를 원본 픽셀로 바꿔 Follow로 앞뒤 추적하고, 그사이 영상이 바뀌지 않았으면 경로를 저장한다.",
+      "params": [
+        "TrackRequest"
+      ],
+      "returns": "TrackResult",
+      "error": true
     }
   ],
   "types": {
@@ -256,6 +272,11 @@
         "json": "end",
         "go": "End",
         "type": "number"
+      },
+      {
+        "json": "track",
+        "go": "Track",
+        "type": "number"
       }
     ],
     "ProgressEvent": [
@@ -295,6 +316,82 @@
         "json": "savedAt",
         "go": "SavedAt",
         "type": "number"
+      }
+    ],
+    "Rect": [
+      {
+        "json": "x",
+        "go": "X",
+        "type": "number"
+      },
+      {
+        "json": "y",
+        "go": "Y",
+        "type": "number"
+      },
+      {
+        "json": "w",
+        "go": "W",
+        "type": "number"
+      },
+      {
+        "json": "h",
+        "go": "H",
+        "type": "number"
+      }
+    ],
+    "TrackRequest": [
+      {
+        "json": "time",
+        "go": "Time",
+        "type": "number"
+      },
+      {
+        "json": "start",
+        "go": "Start",
+        "type": "number"
+      },
+      {
+        "json": "end",
+        "go": "End",
+        "type": "number"
+      },
+      {
+        "json": "rect",
+        "go": "Rect",
+        "type": "Rect"
+      }
+    ],
+    "TrackResult": [
+      {
+        "json": "id",
+        "go": "ID",
+        "type": "number"
+      },
+      {
+        "json": "start",
+        "go": "Start",
+        "type": "number"
+      },
+      {
+        "json": "fps",
+        "go": "FPS",
+        "type": "number"
+      },
+      {
+        "json": "frames",
+        "go": "Frames",
+        "type": "[number, number, number, number][]"
+      },
+      {
+        "json": "lostStart",
+        "go": "LostStart",
+        "type": "boolean"
+      },
+      {
+        "json": "lostEnd",
+        "go": "LostEnd",
+        "type": "boolean"
       }
     ],
     "VideoInfo": [
@@ -350,6 +447,11 @@
       "name": "export:progress",
       "const": "evExportProgress",
       "payload": "ProgressEvent"
+    },
+    {
+      "name": "track:progress",
+      "const": "evTrackProgress",
+      "payload": "ProgressEvent"
     }
   ],
   "errors": {
@@ -380,6 +482,7 @@
     "msgTooManyRects": "가릴 곳은 10개까지 정할 수 있습니다. 필요 없는 것을 지워 주세요.",
     "msgTooShort": "자를 구간이 너무 짧습니다. 시작과 끝을 1초 이상 떨어지게 정해 주세요.",
     "msgToolMissing": "프로그램 파일 일부가 없습니다. 프로그램 폴더를 처음 받은 그대로 다시 풀어 주세요.",
+    "msgTrackStale": "움직임을 따라간 가림 정보가 없습니다. 3단계에서 그 가림의 \"움직임 따라가기\"를 다시 눌러 주세요.",
     "msgUnavailable": "삭제되었거나 볼 수 없는 영상입니다. 다른 영상 주소를 넣어 주세요."
   }
 }
