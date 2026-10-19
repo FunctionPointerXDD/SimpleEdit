@@ -11,6 +11,7 @@ export {EVENTS};
 
 /** @typedef {import('../wailsjs/go/models').main.AnalyzeRequest} AnalyzeRequest */
 /** @typedef {import('../wailsjs/go/models').main.ExportRequest} ExportRequest */
+/** @typedef {import('../wailsjs/go/models').main.TrackRequest} TrackRequest */
 /** @typedef {import('./apiSpec.js').ProgressEvent} ProgressEvent */
 /** @template T @typedef {Omit<T, 'convertValues'>} Plain */
 
@@ -23,6 +24,8 @@ export const openLocal = () => App.OpenLocal();
 export const closeVideo = () => App.CloseVideo();
 /** @param {Plain<AnalyzeRequest>} req */
 export const analyze = (req) => App.Analyze(/** @type {AnalyzeRequest} */ (req));
+/** @param {Plain<TrackRequest>} req */
+export const track = (req) => App.Track(/** @type {TrackRequest} */ (req));
 /** @param {Plain<ExportRequest>} req */
 export const exportVideo = (req) => App.Export(/** @type {ExportRequest} */ (req));
 export const cancel = () => App.Cancel();

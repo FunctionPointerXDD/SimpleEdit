@@ -5,6 +5,8 @@
 // 640px은 확실한 번호판(0.7 이상)을 14장면 중 4개만 잡았고 960px은 1280px과 같은 11개였다(10-05).
 // 검출은 0.3까지 받아 트랙을 잇고, 트랙이 남으려면 최고 점수가 크기와 상관없이 0.7 이상이어야 한다.
 // 짧은 트랙(검출 3회 미만, 약 0.3초)은 0.8이 필요하다. 번호판 상자는 꼭 맞아 30%만 키우고 올리지 않는다.
+// ManualRect.Path는 "움직임 따라가기" 상자(First부터 프레임마다)이고, 추적 상자는 번호판에 꼭 맞게
+// 나올 때가 많아 followExpand(20%)만큼 넓혀 흐린다(화면 state.js TRACK_EXPAND와 같음).
 // AutoLayer는 종류별 프레임 박스이고, Ellipse면 내접 타원(얼굴), 아니면 사각형(번호판)으로 흐린다.
 // 검출기가 Prepare·Infer를 지원하면(pipelined) 다음 프레임 입력 변환을 이번 프레임 추론과 겹친다.
 // 계산 고루틴 하나가 Infer를 차례로 부르고, 넘기는 채널은 버퍼가 없어 아직 계산 중인 슬롯을
@@ -155,18 +157,26 @@ func normalize(boxes []detect.Box, w, h int) []Det {
 type ManualRect struct {
 	Rect       media.Rect
 	First, End int
+	Path       []media.Rect
 }
+
+const followExpand = 0.2
 
 type AutoLayer struct {
 	Frames  [][]media.Rect
 	Ellipse bool
 }
 
-// n번째 프레임에 [First, End) 안인 수동 사각형과, 층마다 Ellipse에 따라 자동 박스를 흐린다.
+// [First, End) 안의 수동 사각형(Path가 있으면 그 프레임 상자를 넓혀)과 층별 자동 박스를 흐린다.
 func BlurFunc(manual []ManualRect, auto []AutoLayer) media.FrameFunc {
 	return func(n int, f frame.Frame) error {
 		for _, m := range manual {
-			if n >= m.First && n < m.End {
+			if n < m.First || n >= m.End {
+				continue
+			}
+			if m.Path != nil {
+				blur(f, expand(m.Path[n-m.First], followExpand, 0), false)
+			} else {
 				blur(f, m.Rect, false)
 			}
 		}

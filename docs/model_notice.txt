@@ -3,6 +3,10 @@
 [얼굴] face_yunet_2026may.onnx
   YuNet, OpenCV Zoo (https://github.com/opencv/opencv_zoo), MIT License
 
+[물체 추적] object_tracking_vittrack_2023sep.onnx
+  VitTrack, OpenCV Zoo (https://github.com/opencv/opencv_zoo), Apache License 2.0
+  Pengyu Liu, GSoC 2023 "Realtime object tracking models"
+
 [번호판] plate_yolox_tiny.onnx
   모델 구조와 학습 코드: YOLOX (https://github.com/Megvii-BaseDetection/YOLOX), Apache License 2.0
   COCO 사전학습 가중치 yolox_tiny.pth에서 번호판 1종류로 이어 학습했습니다.

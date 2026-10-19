@@ -10,7 +10,8 @@ wails="$(command -v wails || echo "$HOME/go/bin/wails")"
 if [ ! -f "$root/tools/windows/yt-dlp.exe" ]; then
   "$root/scripts/fetch-tools.sh" windows
 fi
-if [ ! -f "$root/tools/windows/onnxruntime.dll" ] || [ ! -f "$root/tools/models/face_yunet_2026may.onnx" ]; then
+if [ ! -f "$root/tools/windows/onnxruntime.dll" ] || [ ! -f "$root/tools/models/face_yunet_2026may.onnx" ] \
+  || [ ! -f "$root/tools/models/object_tracking_vittrack_2023sep.onnx" ]; then
   "$root/scripts/fetch-tools.sh" ml
 fi
 if [ ! -f "$root/tools/windows/vcruntime140_1.dll" ]; then
@@ -39,7 +40,8 @@ cp "build/bin/simpleEdit.exe" "$out/$name.exe"
 cp tools/windows/yt-dlp.exe tools/windows/ffmpeg.exe tools/windows/ffprobe.exe tools/windows/deno.exe \
   tools/windows/onnxruntime.dll tools/windows/msvcp140.dll tools/windows/msvcp140_1.dll \
   tools/windows/vcruntime140.dll tools/windows/vcruntime140_1.dll "$out/bin/"
-cp tools/models/face_yunet_2026may.onnx tools/models/plate_yolox_tiny.onnx "$out/bin/models/"
+cp tools/models/face_yunet_2026may.onnx tools/models/plate_yolox_tiny.onnx \
+  tools/models/object_tracking_vittrack_2023sep.onnx "$out/bin/models/"
 # 모델·학습 데이터 출처(CC BY 4.0 표시 의무)
 cp docs/model_notice.txt "$out/bin/models/출처.txt"
 

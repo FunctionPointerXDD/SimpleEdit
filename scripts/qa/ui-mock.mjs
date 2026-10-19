@@ -77,6 +77,15 @@ function installMock({video, meta}) {
             return {url: `/video/${video}.webm`, duration: 20, width: meta.w, height: meta.h, name: '최근 영상 1', reused: true};
         },
         CloseVideo: async () => { window.__mock.closed++; },
+        Track: async (req) => {
+            window.__mock.trackReq = req;
+            await fakeProgress('track:progress', ['track'], 30);
+            const fps = 30;
+            const start = Math.max(req.start, req.time - 1);
+            const n = Math.round(3 * fps);
+            const frames = Array.from({length: n}, (_, i) => [req.rect.x + 0.002 * i, req.rect.y, req.rect.w, req.rect.h]);
+            return {id: 7, start, fps, frames, lostStart: false, lostEnd: true};
+        },
         Analyze: async (req) => {
             window.__mock.analyzeReq = req;
             window.__mock.analyzeCount = (window.__mock.analyzeCount || 0) + 1;
@@ -298,6 +307,23 @@ const at6 = await settleRed(([, b]) => b > 50);
 check('6초: 2번도 보임', at6[1] > 50, String(at6));
 await shot('3-rect-time');
 
+// 움직임 따라가기: 1번(항상 가림, 3초에 그림)을 따라가면 3~6초만, 놓친 뒤쪽 안내, 취소하면 원래대로
+await item(1).getByRole('button', {name: '움직임 따라가기'}).click();
+await page.waitForTimeout(50);
+check('따라가는 동안 목록 버튼 잠김', await item(0).getByRole('button', {name: '지우기'}).isDisabled());
+await page.waitForSelector('.rect-list li.rect-item .rect-lost');
+const treq = await page.evaluate(() => window.__mock.trackReq);
+check('따라가기 요청: 그린 시각·상자·구간', Math.abs(treq.time - 3) < 0.05 && treq.start === 3 && treq.end === 13.5 &&
+    Math.abs(treq.rect.x - 0.1) < 0.01, JSON.stringify(treq));
+check('따라간 구간 표시', (await item(1).textContent()).includes('00:03.0 ~ 00:06.0 따라감'), await item(1).textContent());
+check('놓친 곳 안내', (await item(1).textContent()).includes('00:06.0 뒤는 놓쳤습니다'));
+check('따라간 가림은 취소 버튼만', (await item(1).getByRole('button', {name: '따라가기 취소'}).count()) === 1 &&
+    (await item(1).getByRole('button', {name: '여기서부터'}).count()) === 0);
+check('따라간 구간 띠', (await page.$$('.rect-span')).length === 2);
+await shot('3-rect-follow');
+await item(1).getByRole('button', {name: '따라가기 취소'}).click();
+check('취소하면 항상 가림', (await item(1).textContent()).includes('항상 가림') && (await page.$$('.rect-span')).length === 1);
+
 // 3단계: 자동 가리기
 check('자동 전에는 주황 박스 없음', (await orangeCount()) === 0);
 await click('사람 얼굴 가리기');
@@ -401,6 +427,7 @@ check('사각형 2 비율(역방향 드래그)', near(req.rects[1].x, 0.6) && ne
 check('사각형 개수', req.rects.length === 2);
 check('사각형 2 시간 5~8초', req.rects[1].start === 5 && req.rects[1].end === 8, JSON.stringify(req.rects[1]));
 check('사각형 1 시간은 구간 전체', req.rects[0].start === 3 && req.rects[0].end === 13.5, JSON.stringify(req.rects[0]));
+check('따라가기 취소한 가림은 추적 번호 없음', req.rects[0].track === 0 && req.rects[1].track === 0, JSON.stringify(req.rects));
 check('완료 안내에 폴더·이름', (await page.textContent('.done-card')).includes('D:\\강의영상') &&
     (await page.textContent('.done-card')).includes('교차로 사고 영상.mp4'));
 check('처음 저장은 덮어쓰기 아님', req.overwrite === false, String(req.overwrite));

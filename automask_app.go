@@ -174,8 +174,12 @@ func loadDetector[T any](model string, open func(string) (T, error)) (T, error) 
 func (a *App) closeDetectors() {
 	a.detMu.Lock()
 	defer a.detMu.Unlock()
-	if a.faceDet == nil && a.plateDet == nil {
+	if a.faceDet == nil && a.plateDet == nil && a.tracker == nil {
 		return
+	}
+	if a.tracker != nil {
+		a.tracker.Close()
+		a.tracker = nil
 	}
 	if a.faceDet != nil {
 		a.faceDet.Close()

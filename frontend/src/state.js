@@ -3,6 +3,9 @@
 // rects·AutoBox 좌표는 레터박스를 뺀 영상 영역 기준 0~1 비율, 시각은 초다.
 // rects[i].from·to는 직접 가림을 켤 원본 기준 시각이고, null이면 자른 구간의 시작·끝을 따른다.
 // 그래서 구간을 다시 잘라도 "항상 가리기" 가림은 새 구간 전체를 가린다.
+// rects[i].at은 그린 원본 시각, track은 "움직임 따라가기" 결과(Go가 준 추적 번호·프레임별 상자)다.
+// track이 있으면 켜는 시간은 따라간 구간이고, 상자는 그 시각 프레임의 추적 상자를 TRACK_EXPAND만큼
+// 넓힌 것이다(Go automask.followExpand와 같음, 저장 블러와 미리보기를 맞춤).
 // savedPath는 마지막 저장 파일, savedRequest는 그때 내용(구간·가림·소리) JSON,
 // savedTarget은 그때 [이름, 폴더] JSON이다. outputFolder는 Go가 알려 준 현재 저장 폴더다.
 
@@ -11,6 +14,7 @@ import {closeVideo} from './media/videoSource.js';
 /** @typedef {import('../wailsjs/go/models').main.VideoInfo} VideoInfo */
 /** @typedef {import('../wailsjs/go/models').main.AutoMask} AutoMask */
 /** @typedef {import('../wailsjs/go/models').media.MaskRect} MaskRect */
+/** @typedef {import('../wailsjs/go/models').main.TrackResult} TrackResult */
 
 /**
  * @typedef {Object} ManualRect
@@ -20,6 +24,8 @@ import {closeVideo} from './media/videoSource.js';
  * @property {number} h
  * @property {number | null} from
  * @property {number | null} to
+ * @property {number} at
+ * @property {TrackResult | null} track
  */
 
 /**
@@ -189,9 +195,32 @@ export function checkRange() {
  * @returns {[number, number] | null}
  */
 export function rectSpan(r) {
-    const a = Math.max(state.start, r.from ?? state.start);
-    const b = Math.min(state.end, r.to ?? state.end);
+    const t = r.track;
+    const from = t ? t.start : r.from;
+    const to = t ? t.start + t.frames.length / t.fps : r.to;
+    const a = Math.max(state.start, from ?? state.start);
+    const b = Math.min(state.end, to ?? state.end);
     return b > a ? [a, b] : null;
+}
+
+const TRACK_EXPAND = 0.2;
+
+// 추적한 가림이면 t 프레임(내림) 상자를 넓혀 0~1로 자르고, 아니면 그린 상자 그대로
+/**
+ * @param {ManualRect} r
+ * @param {number} t
+ * @returns {{x: number, y: number, w: number, h: number}}
+ */
+export function rectBoxAt(r, t) {
+    const tr = r.track;
+    if (!tr) return {x: r.x, y: r.y, w: r.w, h: r.h};
+    const n = Math.min(tr.frames.length - 1, Math.max(0, Math.floor((t - tr.start) * tr.fps + 1e-3)));
+    const [x, y, w, h] = tr.frames[n];
+    const dx = w * TRACK_EXPAND / 2;
+    const dy = h * TRACK_EXPAND / 2;
+    const x0 = Math.max(0, x - dx);
+    const y0 = Math.max(0, y - dy);
+    return {x: x0, y: y0, w: Math.min(1, x + w + dx) - x0, h: Math.min(1, y + h + dy) - y0};
 }
 
 // rectSpan 안이면 true. 끝 시각 프레임은 빼려고 1ms 앞당겨 비교한다.
@@ -209,6 +238,6 @@ export function rectActiveAt(r, t) {
 export function rectsForExport() {
     return state.rects.flatMap((r) => {
         const span = rectSpan(r);
-        return span ? [{x: r.x, y: r.y, w: r.w, h: r.h, start: span[0], end: span[1]}] : [];
+        return span ? [{x: r.x, y: r.y, w: r.w, h: r.h, start: span[0], end: span[1], track: r.track?.id ?? 0}] : [];
     });
 }

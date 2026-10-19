@@ -7,6 +7,9 @@
 // 점수 = obj × cls (scripts/plate/detect.py와 같음, 같은 프레임에서 박스·점수 일치 확인 10-05).
 // DefaultPlateScore 0.3은 트랙을 잇는 데만 쓰는 낮은 기준이고, 새 번호판 인정(0.7)은 automask가 한다.
 // 입력 텐서 2개로 Prepare·Infer를 겹치는 방식은 FaceDetector와 같다.
+// 높이가 화면의 maxPlateHeight를 넘는 상자는 버린다. 모델이 도로 표지판·건물 창을 0.8 넘게 잡은 일이
+// 있었다(10-19 사용자 신고, day.mp4 2분 7초). 시험 영상 4개(2장/초)에서 0.3 이상 검출 중 진짜 번호판은
+// 높이 77px(1080p 바로 앞 버스, 7%) 이하였고 80px 이상은 모두 표지판·건물·불빛이었다.
 
 package detect
 
@@ -26,7 +29,10 @@ const (
 	plateOut   = 6
 )
 
-const DefaultPlateScore = 0.3
+const (
+	DefaultPlateScore = 0.3
+	maxPlateHeight    = 0.1
+)
 
 var plateStrides = [3]int{8, 16, 32}
 
@@ -130,7 +136,18 @@ func (d *PlateDetector) Infer(p Prepared) ([]Box, error) {
 		return nil, fmt.Errorf("번호판 추론: %w", err)
 	}
 	boxes := NMS(decodeYOLOX(d.out.GetData(), p.pw, p.ph, d.ScoreThreshold), d.NMSThreshold)
-	return toFrame(boxes, p.scale, p.w, p.h), nil
+	return dropTall(toFrame(boxes, p.scale, p.w, p.h), p.h), nil
+}
+
+// 높이가 화면 높이 h의 maxPlateHeight를 넘는 상자를 뺀다(제자리에서 거름).
+func dropTall(boxes []Box, h int) []Box {
+	out := boxes[:0]
+	for _, b := range boxes {
+		if b.H <= maxPlateHeight*float32(h) {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 func (d *PlateDetector) Close() {

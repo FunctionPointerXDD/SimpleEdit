@@ -49,3 +49,7 @@ export function OutputFolder() {
 export function RecentVideos() {
   return window['go']['main']['App']['RecentVideos']();
 }
+
+export function Track(arg1) {
+  return window['go']['main']['App']['Track'](arg1);
+}

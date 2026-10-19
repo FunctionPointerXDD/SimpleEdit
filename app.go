@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -101,14 +102,17 @@ type App struct {
 	lastName   string
 	lastDir    string
 	auto       map[string]*automask.Coverage
+	paths      map[int]*automask.Path
+	nextPath   int
 
 	detMu    sync.Mutex
 	faceDet  *detect.FaceDetector
 	plateDet *detect.PlateDetector
+	tracker  *detect.Tracker
 }
 
 func NewApp() *App {
-	return &App{updateDone: make(chan struct{}), auto: map[string]*automask.Coverage{}}
+	return &App{updateDone: make(chan struct{}), auto: map[string]*automask.Coverage{}, paths: map[int]*automask.Path{}}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -321,6 +325,7 @@ func (a *App) load(ctx context.Context, path, workDir string, emit func(float64,
 	defer a.mu.Unlock()
 	a.source, a.preview, a.info = path, preview, info
 	a.auto = map[string]*automask.Coverage{}
+	a.paths = map[int]*automask.Path{}
 	a.lastOutput, a.lastName, a.lastDir = "", "", ""
 	a.version++
 	return VideoInfo{
@@ -337,6 +342,7 @@ func (a *App) CloseVideo() {
 	defer a.mu.Unlock()
 	a.source, a.preview, a.info = "", "", media.Info{}
 	a.auto = map[string]*automask.Coverage{}
+	a.paths = map[int]*automask.Path{}
 	a.lastOutput, a.lastName, a.lastDir = "", "", ""
 	applog.Printf("영상 닫음")
 }
@@ -414,7 +420,13 @@ func (a *App) Export(req ExportRequest) (string, error) {
 		write = savingPath(out)
 		os.Remove(write)
 	}
-	manual := manualRects(req.Rects, start, end, info.FPS)
+	a.mu.Lock()
+	paths := maps.Clone(a.paths)
+	a.mu.Unlock()
+	manual, err := manualRects(req.Rects, start, end, info.FPS, paths)
+	if err != nil {
+		return "", userError(msgTrackStale, err)
+	}
 	applog.Printf("저장: %.2f~%.2f초, 사각형 %+v, 자동 %v, 무음 %v, 덮어쓰기 %v → %s", start, end, manual, req.Auto, req.Mute, replace, out)
 
 	emit := a.progressEmitter(evExportProgress)
@@ -512,9 +524,10 @@ func (a *App) progressEmitter(name string) func(frac float64, stage string) {
 	}
 }
 
-// 켜는 시각을 저장 구간 프레임 [First, End)로 바꾼다. 구간 밖으로 남는 시간이 없으면 뺀다.
-func manualRects(rs []media.MaskRect, start, end, fps float64) []automask.ManualRect {
+// 켜는 시각을 저장 구간 프레임 [First, End)로 바꾸고, 추적 가림은 그 구간의 경로 상자를 붙인다.
+func manualRects(rs []media.MaskRect, start, end, fps float64, paths map[int]*automask.Path) ([]automask.ManualRect, error) {
 	total := automask.FrameAt(end-start, fps)
+	base := automask.FrameAt(start, fps)
 	var manual []automask.ManualRect
 	for _, r := range rs {
 		first, last := 0, total
@@ -522,9 +535,22 @@ func manualRects(rs []media.MaskRect, start, end, fps float64) []automask.Manual
 			first = max(0, automask.FrameAt(r.Start-start, fps))
 			last = min(total, automask.FrameAt(r.End-start, fps))
 		}
+		m := automask.ManualRect{Rect: r.Box()}
+		if r.Track != 0 {
+			p, ok := paths[r.Track]
+			if !ok {
+				return nil, fmt.Errorf("추적 %d 없음", r.Track)
+			}
+			first = max(first, p.First-base)
+			last = min(last, p.First+len(p.Boxes)-base)
+			if last > first {
+				m.Path = p.Boxes[first+base-p.First : last+base-p.First]
+			}
+		}
 		if last > first {
-			manual = append(manual, automask.ManualRect{Rect: r.Box(), First: first, End: last})
+			m.First, m.End = first, last
+			manual = append(manual, m)
 		}
 	}
-	return manual
+	return manual, nil
 }

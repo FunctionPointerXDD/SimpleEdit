@@ -4,6 +4,7 @@ export const EVENTS = /** @type {const} */ ({
     analyzeProgress: 'analyze:progress',
     downloadProgress: 'download:progress',
     exportProgress: 'export:progress',
+    trackProgress: 'track:progress',
 });
 
 export const MESSAGES = {
@@ -34,6 +35,7 @@ export const MESSAGES = {
     msgTooManyRects: '가릴 곳은 10개까지 정할 수 있습니다. 필요 없는 것을 지워 주세요.',
     msgTooShort: '자를 구간이 너무 짧습니다. 시작과 끝을 1초 이상 떨어지게 정해 주세요.',
     msgToolMissing: '프로그램 파일 일부가 없습니다. 프로그램 폴더를 처음 받은 그대로 다시 풀어 주세요.',
+    msgTrackStale: '움직임을 따라간 가림 정보가 없습니다. 3단계에서 그 가림의 "움직임 따라가기"를 다시 눌러 주세요.',
     msgUnavailable: '삭제되었거나 볼 수 없는 영상입니다. 다른 영상 주소를 넣어 주세요.',
 };
 
@@ -76,6 +78,7 @@ export const MESSAGES = {
  * @property {number} h
  * @property {number} start
  * @property {number} end
+ * @property {number} track
  */
 
 /**
@@ -91,6 +94,32 @@ export const MESSAGES = {
  * @property {string} title
  * @property {number} duration
  * @property {number} savedAt
+ */
+
+/**
+ * @typedef {Object} Rect
+ * @property {number} x
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ */
+
+/**
+ * @typedef {Object} TrackRequest
+ * @property {number} time
+ * @property {number} start
+ * @property {number} end
+ * @property {Rect} rect
+ */
+
+/**
+ * @typedef {Object} TrackResult
+ * @property {number} id
+ * @property {number} start
+ * @property {number} fps
+ * @property {[number, number, number, number][]} frames
+ * @property {boolean} lostStart
+ * @property {boolean} lostEnd
  */
 
 /**
