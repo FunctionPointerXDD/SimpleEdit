@@ -44,6 +44,9 @@ cp tools/models/face_yunet_2026may.onnx tools/models/plate_yolox_tiny.onnx \
   tools/models/object_tracking_vittrack_2023sep.onnx "$out/bin/models/"
 # 모델·학습 데이터 출처(CC BY 4.0 표시 의무)
 cp docs/model_notice.txt "$out/bin/models/출처.txt"
+# 앱 라이선스(MIT)와 함께 넣은 도구·모델·Go 모듈의 라이선스 전문
+cp LICENSE "$out/LICENSE.txt"
+scripts/notices.sh > "$out/THIRD_PARTY_NOTICES.txt"
 
 if [ "${1:-}" != "--no-zip" ]; then
   rm -f "$root/dist/$name.zip"

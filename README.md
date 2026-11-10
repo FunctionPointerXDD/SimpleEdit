@@ -48,7 +48,9 @@ WebView2 런타임이 없는 PC에서는 처음 실행할 때 Wails 기본 안�
 | --- | --- |
 | 저장한 영상 | 기본은 바탕화면 `운전강의_YYYYMMDD_HHMM.mp4` (4단계에서 바꿀 수 있음) |
 | 받은 원본 | `%LOCALAPPDATA%\운전영상편집기\work\` (앱 시작 시 7일 지난 파일 삭제) |
-| 로그 | `%LOCALAPPDATA%\운전영상편집기\logs\app.log` (문제가 생기면 이 파일을 보내 주세요) |
+| 로그 | `%LOCALAPPDATA%\운전영상편집기\logs\app.log` |
+
+문제나 건의는 [Issues](https://github.com/FunctionPointerXDD/SimpleEdit/issues)에 남겨 주세요. 로그 파일을 첨부하면 원인을 찾기 쉽습니다.
 
 ## 개발
 
@@ -104,7 +106,13 @@ frontend/src/             마법사 화면(steps/), 미리보기 위 그리기(m
 scripts/plate/            번호판 YOLOX 학습·ONNX 내보내기·INT8 변환(Colab)
 ```
 
-## 모델과 외부 도구
+## 라이선스
+
+이 앱의 코드는 [MIT 라이선스](LICENSE)입니다.
+배포 zip에 함께 들어 있는 도구·모델과 실행 파일에 들어간 Go 모듈은 각자의 라이선스를 따르며, 전문은 zip의 `THIRD_PARTY_NOTICES.txt`에 있습니다(`scripts/notices.sh`가 만들고 원문은 [docs/licenses](docs/licenses)).
+FFmpeg는 GPL v3 빌드이지만 앱은 별도 프로그램으로 실행만 하므로 앱 코드에는 GPL이 적용되지 않습니다.
+
+### 모델과 외부 도구
 
 | 구성 요소 | 출처 | 라이선스 |
 | --- | --- | --- |
@@ -112,7 +120,7 @@ scripts/plate/            번호판 YOLOX 학습·ONNX 내보내기·INT8 변환
 | 추적 `object_tracking_vittrack_2023sep.onnx` | VitTrack, OpenCV Zoo | Apache-2.0 |
 | 번호판 `plate_yolox_tiny.onnx` | YOLOX-Tiny를 번호판 1종류로 이어 학습, INT8 변환 | 코드 Apache-2.0, 학습 데이터 CC BY 4.0 |
 | ONNX Runtime 1.29.0 | Microsoft | MIT |
-| FFmpeg | BtbN/FFmpeg-Builds (win64 gpl) | GPL |
+| FFmpeg | BtbN/FFmpeg-Builds (win64 gpl) | GPL v3 |
 | yt-dlp | yt-dlp | Unlicense |
 | Deno | denoland (yt-dlp 유튜브 처리용) | MIT |
 | VC++ 런타임 DLL 4개 | Microsoft 재배포 가능 패키지 | Microsoft 재배포 조건 |
