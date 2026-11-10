@@ -9,7 +9,7 @@
 
 ## 받기와 실행
 
-1. [Releases](https://github.com/FunctionPointerXDD/SimpleEdit/releases)에서 `운전영상편집기-<버전>.zip`을 받습니다.
+1. [Releases](https://github.com/FunctionPointerXDD/SimpleEdit/releases)에서 `simpleEdit-<버전>-windows.zip`을 받습니다(압축을 풀면 `운전영상편집기` 폴더가 나옵니다).
 2. 원하는 곳에 압축을 풀고 `운전영상편집기.exe`를 실행합니다. 설치는 필요 없습니다.
 3. 바탕화면 바로가기가 필요하면 `운전영상편집기.exe`를 마우스 오른쪽 단추로 눌러 직접 만듭니다.
 
