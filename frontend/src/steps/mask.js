@@ -2,8 +2,12 @@
 // 직접 가림은 처음엔 항상 가리고, 영상을 옮겨 놓고 [여기서부터]·[여기까지]로 시간을 줄인다.
 // 2단계 "여기서 시작/끝"과 같은 방식이다. 시간을 줄인 가림은 재생 막대 아래 번호 띠로 보이고,
 // 미리보기에는 켜진 시각에만 나온다. 목록은 최근에 그린 것이 위다(번호는 그린 순서 그대로).
-// 구간 시작·끝에 0.05초 안으로 붙여 누르면 그쪽은 비워(null) 구간을 다시 잘라도 따라가게 한다.
-// 구간을 다시 잘라 가림이 구간 밖이 되면 영상을 거기로 옮길 수 없어, 누른 쪽만 새로 정하고 반대쪽은 비운다.
+// 재생 막대·시각은 2단계 구간들을 이어 붙인 시각이고, 구간이 바뀌는 곳에 세로선을 둔다.
+// 가림 시각은 원본 시각으로 두고 보일 때만 이어 붙인 시각으로 바꾼다(state.rectPieces·outAt).
+// 이어 붙인 영상의 처음·끝에 0.05초 안으로 붙여 누르면 그쪽은 비워(null) 구간을 바꿔도 따라가게 한다.
+// 구간을 바꿔 가림 시각이 구간 밖이 되면 영상을 거기로 옮길 수 없어, 누른 쪽만 새로 정하고 반대쪽은 비운다.
+// 움직임 따라가기는 그린 시각이 든 구간 안에서만 따라간다.
+// 목록 시각(outSpan)은 가림 조각들의 이어 붙인 시각 중 처음~끝이다.
 // [움직임 따라가기]는 그린 시각(at)에서 앞뒤로 추적해 그 구간만, 프레임마다 옮겨 가며 가린다.
 // 놓친 곳이 있으면 그 시각을 알려 주고, 사용자는 거기서 새로 그려 다시 따라가게 한다.
 // 따라간 가림은 시간 버튼 대신 [따라가기 취소]만 둔다(취소하면 그린 상자로 항상 가림).
@@ -19,7 +23,10 @@ import {createAutoPanel} from '../mask/autoPanel.js';
 import {createSoundPanel} from '../mask/soundPanel.js';
 import {createProgress} from '../ui/progress.js';
 import * as api from '../api.js';
-import {state, MAX_RECTS, autoRectsAt, toggleExcluded, rectSpan, rectActiveAt, rectBoxAt} from '../state.js';
+import {
+    state, MAX_RECTS, autoRectsAt, toggleExcluded, rectPieces, rectActiveAt, rectBoxAt,
+    clipSegments, segmentIndexAt, segmentOuts, outAt, totalLength,
+} from '../state.js';
 import {formatClock, roundTenth} from '../util/time.js';
 
 const EDGE = 0.05;
@@ -36,8 +43,10 @@ export const maskStep = {
         let tracking = false;
 
         const player = createPlayer({
-            video: openVideo(v.url), duration: v.duration, min: state.start, max: state.end, fineSteps: false,
+            video: openVideo(v.url), duration: v.duration, segments: clipSegments(), fineSteps: false,
         });
+        const total = totalLength();
+        const cuts = h('div.seg-cuts', {}, ...segmentOuts().slice(1).map(([o]) => h('div.seg-cut', {style: `left:${o / total * 100}%`})));
         const overlay = createMaskOverlay({
             video: player.video,
             getRects: (t) => state.rects.flatMap((r, i) => (rectActiveAt(r, t) ? [{...rectBoxAt(r, t), label: i + 1}] : [])),
@@ -61,8 +70,8 @@ export const maskStep = {
             onBlocked: () => guide.set(`가릴 곳은 ${MAX_RECTS}개까지입니다. 필요 없는 것을 지워 주세요.`, 'error'),
         });
         player.video.parentElement.append(overlay.el);
-        player.marks.append(spans);
-        player.seek(state.start);
+        player.marks.append(cuts, spans);
+        player.seekOut(0);
         const auto = createAutoPanel({ctx, guide, player, onChange: () => overlay.redraw()});
         const sound = createSoundPanel({guide, video: player.video});
 
@@ -86,7 +95,7 @@ export const maskStep = {
                 list.replaceChildren(h('li.empty', {}, '아직 없습니다'));
             } else {
                 list.replaceChildren(...state.rects.map((r, i) => {
-                    const span = rectSpan(r);
+                    const span = outSpan(r);
                     const whole = !r.track && r.from === null && r.to === null;
                     const time = !span ? '자른 구간 밖이라 가리지 않습니다'
                         : whole ? '항상 가림' : `${formatClock(span[0])} ~ ${formatClock(span[1])}${r.track ? ' 따라감' : ''}`;
@@ -103,7 +112,7 @@ export const maskStep = {
                             h('button.btn.small.danger', {type: 'button', onclick: () => remove(i), disabled: tracking}, '지우기'),
                         ),
                         h(span ? 'div.rect-time' : 'div.rect-time.out', {}, time,
-                            span && !whole && h('button.link', {type: 'button', onclick: () => player.playRange(span[0], span[1])}, '이 부분 보기')),
+                            span && !whole && h('button.link', {type: 'button', onclick: () => player.playOut(span[0], span[1])}, '이 부분 보기')),
                         r.track && lostText(r) && h('div.rect-lost', {}, lostText(r)),
                         h('div.rect-actions', {}, ...actions),
                     );
@@ -113,18 +122,22 @@ export const maskStep = {
             overlay.redraw();
         }
 
+        function outSpan(r) {
+            const outs = rectPieces(r).flatMap(([a, b]) => [outAt(a), outAt(b)]);
+            return outs.length ? [Math.min(...outs), Math.max(...outs)] : null;
+        }
+
         function renderSpans() {
-            const len = state.end - state.start || 1;
-            const items = state.rects.flatMap((r, i) => {
-                const span = rectSpan(r);
-                return span && (r.track || r.from !== null || r.to !== null) ? [{span, label: i + 1}] : [];
-            }).sort((a, b) => a.span[0] - b.span[0]);
+            const len = total || 1;
+            const items = state.rects.flatMap((r, i) => (r.track || r.from !== null || r.to !== null
+                ? rectPieces(r).map(([a, b]) => ({span: [outAt(a), outAt(b)], label: i + 1})) : []))
+                .sort((a, b) => a.span[0] - b.span[0]);
             const laneEnds = [];
             spans.replaceChildren(...items.map(({span, label}) => {
                 let lane = laneEnds.findIndex((end) => end <= span[0]);
                 if (lane < 0) lane = laneEnds.length;
                 laneEnds[lane] = span[1];
-                const left = (span[0] - state.start) / len * 100;
+                const left = span[0] / len * 100;
                 const width = (span[1] - span[0]) / len * 100;
                 const place = lane % 2 === 0 ? 'bottom:-8px' : 'top:-6px';
                 return h('div.rect-span', {style: `left:${left}%;width:${width}%;${place}`}, String(label));
@@ -134,26 +147,30 @@ export const maskStep = {
         function setFrom(i) {
             const r = state.rects[i];
             const t = roundTenth(player.currentTime);
-            if (!rectSpan(r)) r.to = null;
-            if (t >= (r.to ?? state.end) - EDGE) {
-                guide.set(`${i + 1}번 가림의 끝(${formatClock(r.to ?? state.end)})보다 앞에서 눌러 주세요.`, 'error');
+            const o = outAt(t) ?? 0;
+            if (!outSpan(r) || (r.to !== null && outAt(r.to) === null)) r.to = null;
+            const to = r.to === null ? total : outAt(r.to);
+            if (o >= to - EDGE) {
+                guide.set(`${i + 1}번 가림의 끝(${formatClock(to)})보다 앞에서 눌러 주세요.`, 'error');
                 return;
             }
-            r.from = t <= state.start + EDGE ? null : t;
-            guide.set(`${i + 1}번 가림을 ${formatClock(t)}부터 가립니다.`, 'success');
+            r.from = o <= EDGE ? null : t;
+            guide.set(`${i + 1}번 가림을 ${formatClock(o)}부터 가립니다.`, 'success');
             renderList();
         }
 
         function setTo(i) {
             const r = state.rects[i];
             const t = roundTenth(player.currentTime);
-            if (!rectSpan(r)) r.from = null;
-            if (t <= (r.from ?? state.start) + EDGE) {
-                guide.set(`${i + 1}번 가림의 시작(${formatClock(r.from ?? state.start)})보다 뒤에서 눌러 주세요.`, 'error');
+            const o = outAt(t) ?? 0;
+            if (!outSpan(r) || (r.from !== null && outAt(r.from) === null)) r.from = null;
+            const from = r.from === null ? 0 : outAt(r.from);
+            if (o <= from + EDGE) {
+                guide.set(`${i + 1}번 가림의 시작(${formatClock(from)})보다 뒤에서 눌러 주세요.`, 'error');
                 return;
             }
-            r.to = t >= state.end - EDGE ? null : t;
-            guide.set(`${i + 1}번 가림을 ${formatClock(t)}까지 가립니다.`, 'success');
+            r.to = o >= total - EDGE ? null : t;
+            guide.set(`${i + 1}번 가림을 ${formatClock(o)}까지 가립니다.`, 'success');
             renderList();
         }
 
@@ -166,14 +183,16 @@ export const maskStep = {
         function lostText(r) {
             const t = r.track;
             const end = t.start + t.frames.length / t.fps;
-            const parts = [t.lostStart && `${formatClock(t.start)} 앞`, t.lostEnd && `${formatClock(end)} 뒤`].filter(Boolean);
+            const parts = [t.lostStart && `${formatClock(outAt(t.start) ?? 0)} 앞`, t.lostEnd && `${formatClock(outAt(end) ?? total)} 뒤`]
+                .filter(Boolean);
             return parts.length ? `${parts.join('과 ')}는 놓쳤습니다. 그 장면에서 새로 그려 따라가세요.` : '';
         }
 
         async function follow(i) {
             const r = state.rects[i];
             if (tracking) return;
-            if (r.at < state.start || r.at >= state.end) {
+            const seg = clipSegments()[segmentIndexAt(r.at)];
+            if (!seg) {
                 guide.set(`${i + 1}번 가림을 그린 장면이 자른 구간 밖입니다. 지우고 구간 안에서 새로 그려 주세요.`, 'error');
                 return;
             }
@@ -184,9 +203,9 @@ export const maskStep = {
             trackProgress.start('track');
             const off = api.onProgress(api.EVENTS.trackProgress, (p) => trackProgress.update(p));
             try {
-                r.track = await api.track({time: r.at, start: state.start, end: state.end, rect: {x: r.x, y: r.y, w: r.w, h: r.h}});
+                r.track = await api.track({time: r.at, start: seg.start, end: seg.end, rect: {x: r.x, y: r.y, w: r.w, h: r.h}});
                 r.from = r.to = null;
-                const span = rectSpan(r);
+                const span = outSpan(r);
                 const lost = lostText(r);
                 guide.set(`${i + 1}번 가림을 ${formatClock(span[0])} ~ ${formatClock(span[1])} 동안 따라갔습니다. `
                     + (lost || '재생해서 잘 따라가는지 보세요.'), lost ? 'info' : 'success');

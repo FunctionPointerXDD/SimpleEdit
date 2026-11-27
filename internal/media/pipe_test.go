@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"simpleEdit/internal/frame"
@@ -271,4 +273,69 @@ func maxRowStep(f frame.Frame, r image.Rectangle) float64 {
 		prev = v
 	}
 	return worst
+}
+
+func TestProcessSegmentsJoinsInOrder(t *testing.T) {
+	useTools(t)
+	src := makeSource(t, 160, 120, 5)
+	a, b := probeSpec(t, src, 3, 1), probeSpec(t, src, 0.5, 1.5)
+	fill := func(y byte, count *int) FrameFunc {
+		return func(_ int, f frame.Frame) error {
+			*count++
+			for i := range f.W * f.H {
+				f.Pix[i] = y
+			}
+			return nil
+		}
+	}
+	var na, nb int
+	out := filepath.Join(t.TempDir(), "out.mp4")
+	if err := ProcessSegments(context.Background(), []PipeSpec{a, b}, out,
+		[]FrameFunc{fill(200, &na), fill(40, &nb)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if na != 30 || nb != 45 {
+		t.Errorf("구간별 프레임 %d·%d, want 30·45", na, nb)
+	}
+	info, err := Probe(context.Background(), out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := info.Duration - 2.5; d < -0.1 || d > 0.1 || !info.HasAudio {
+		t.Errorf("길이 %.3f초(want 2.5), 소리 %v", info.Duration, info.HasAudio)
+	}
+	o := probeSpec(t, out, 0, 2.5)
+	for _, c := range []struct {
+		n    int
+		want byte
+	}{{5, 200}, {29, 200}, {30, 40}, {70, 40}} {
+		if y := grabFrame(t, o, c.n).Pix[0]; y < c.want-20 || y > c.want+20 {
+			t.Errorf("프레임 %d 밝기 %d, want 약 %d", c.n, y, c.want)
+		}
+	}
+}
+
+func TestProcessSegmentsPadsShortAudio(t *testing.T) {
+	useTools(t)
+	src := filepath.Join(t.TempDir(), "short-audio.mp4")
+	args := []string{"-v", "error", "-y",
+		"-f", "lavfi", "-i", "testsrc=size=160x120:rate=30:duration=5",
+		"-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+		"-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", src}
+	if out, err := exec.Command(tools.Path(tools.FFmpeg), args...).CombinedOutput(); err != nil {
+		t.Fatalf("테스트 영상 생성 실패: %v\n%s", err, out)
+	}
+	parts := []PipeSpec{probeSpec(t, src, 2.5, 1), probeSpec(t, src, 0, 1)}
+	out := filepath.Join(t.TempDir(), "out.mp4")
+	if err := ProcessSegments(context.Background(), parts, out, []FrameFunc{nil, nil}, nil); err != nil {
+		t.Fatal(err)
+	}
+	audio, err := exec.Command(tools.Path(tools.FFprobe), "-v", "error", "-select_streams", "a:0",
+		"-show_entries", "stream=duration", "-of", "csv=p=0", out).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := strconv.ParseFloat(strings.TrimSpace(string(audio)), 64); d < 1.9 || d > 2.1 {
+		t.Errorf("소리 길이 %s초, want 2(앞 구간 모자란 소리는 무음으로 채움)", strings.TrimSpace(string(audio)))
+	}
 }

@@ -92,14 +92,19 @@ function installMock({video, meta}) {
             await fakeProgress('analyze:progress', [`analyze_${req.kind}`], 40);
             const fps = 30;
             window.__mock.covers = window.__mock.covers || {};
-            const prev = !req.fresh && window.__mock.covers[req.kind];
-            const start = prev ? Math.min(prev.start, req.start) : req.start;
-            const end = prev ? Math.max(prev.end, req.end) : req.end;
-            window.__mock.covers[req.kind] = {start, end};
-            const n = Math.round((end - start) * fps);
+            const prev = (!req.fresh && window.__mock.covers[req.kind]) || [];
+            const spans = [...prev, ...req.segments.map((g) => [g.start, g.end])].sort((a, b) => a[0] - b[0]);
+            const merged = [];
+            for (const [a, b] of spans) {
+                const last = merged[merged.length - 1];
+                if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+                else merged.push([a, b]);
+            }
+            window.__mock.covers[req.kind] = merged;
             const box = (t) => (req.kind === 'plate' ? [0.15, 0.6, 0.1, 0.05, 1] : [0.35 + 0.1 * t / 20, 0.2, 0.2, 0.3, 1]);
-            const frames = Array.from({length: n}, (_, i) => [box(start + i / fps)]);
-            return {kind: req.kind, start, duration: end - start, fps, frames, found: n, tracks: 1};
+            const parts = merged.map(([a, b]) => ({start: a, frames: Array.from({length: Math.round((b - a) * fps)}, (_, i) => [box(a + i / fps)])}));
+            const found = parts.reduce((n, p) => n + p.frames.length, 0);
+            return {kind: req.kind, fps, parts, found, tracks: 1};
         },
         Export: async (req) => {
             window.__mock.exportReq = req;
@@ -129,6 +134,11 @@ await page.addInitScript(installMock, {video: VIDEO, meta});
 
 const results = [];
 const check = (name, ok, detail = '') => results.push(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`);
+process.on('uncaughtException', (e) => {
+    console.log(results.join('\n'));
+    console.error(e);
+    process.exit(1);
+});
 const shot = (n) => page.screenshot({path: path.join(OUT, `${n}.png`)});
 const click = (text) => page.getByRole('button', {name: text, exact: true}).click();
 const nextBtn = () => page.getByRole('button', {name: '다음 ▶'});
@@ -138,6 +148,11 @@ const seekTo = (t) => page.$eval('input.seek', (el, v) => {
     el.dispatchEvent(new Event('input'));
     el.dispatchEvent(new Event('change'));
 }, t);
+// 3단계 재생 막대는 이어 붙인 시각이라, 원본 초로 옮길 때는 video를 직접 옮기고 seeked를 기다린다
+const seekSrc = (t) => page.$eval('video', (v, t) => new Promise((ok) => {
+    v.addEventListener('seeked', () => ok(), {once: true});
+    v.currentTime = t;
+}), t);
 // 직접 가림 두 곳(흐린 빨강·노랑이 주황으로 보일 수 있음)은 빼고 센다. box는 3단계에서 정해짐
 const MANUAL_AREAS = [[0.08, 0.18, 0.42, 0.52], [0.58, 0.68, 0.92, 0.92]];
 const orangeCount = () => page.$eval('.mask-canvas', (c, a) => {
@@ -265,16 +280,16 @@ check('지우기 후 2개', (await page.$$('.rect-list li:not(.empty)')).length 
 const item = (i) => page.locator('.rect-list li.rect-item').nth(i);
 check('목록은 최근 것이 위', (await item(0).locator('.badge').textContent()) === '2');
 check('처음엔 항상 가림, 버튼은 바로 보임(눌린 상태)', (await item(0).textContent()).includes('항상 가림') && await item(0).getByRole('button', {name: '항상 가리기'}).isDisabled());
-await seekTo(5);
+await seekSrc(5);
 await item(0).getByRole('button', {name: '여기서부터'}).click();
-await seekTo(8);
+await seekSrc(8);
 await item(0).getByRole('button', {name: '여기까지'}).click();
-check('2번(맨 위) 시간 표시', (await item(0).textContent()).includes('00:05.0 ~ 00:08.0'), await item(0).textContent());
+check('2번(맨 위) 시간 표시(이어 붙인 시각)', (await item(0).textContent()).includes('00:02.0 ~ 00:05.0'), await item(0).textContent());
 check('재생 막대 띠 1개', (await page.$$('.rect-span')).length === 1);
-await seekTo(9);
+await seekSrc(9);
 await item(0).getByRole('button', {name: '여기서부터'}).click();
 check('끝보다 뒤에서 여기서부터 → 안내', (await page.textContent('.guide-line')).includes('앞에서 눌러'));
-check('잘못 눌러도 시간 그대로', (await item(0).textContent()).includes('00:05.0 ~ 00:08.0'));
+check('잘못 눌러도 시간 그대로', (await item(0).textContent()).includes('00:02.0 ~ 00:05.0'));
 await item(1).getByRole('button', {name: '여기까지'}).click();
 check('시간을 줄이면 항상 가리기 버튼 켜짐', await item(1).getByRole('button', {name: '항상 가리기'}).isEnabled());
 await item(1).getByRole('button', {name: '항상 가리기'}).click();
@@ -302,7 +317,7 @@ const settleRed = async (ok) => {
 const at9 = await settleRed(([a, b]) => a > 50 && b === 0);
 check('9초: 항상 가림(1번)은 보임', at9[0] > 50, String(at9));
 check('9초: 5~8초 가림(2번)은 안 보임', at9[1] === 0, String(at9));
-await seekTo(6);
+await seekSrc(6);
 const at6 = await settleRed(([, b]) => b > 50);
 check('6초: 2번도 보임', at6[1] > 50, String(at6));
 await shot('3-rect-time');
@@ -315,8 +330,8 @@ await page.waitForSelector('.rect-list li.rect-item .rect-lost');
 const treq = await page.evaluate(() => window.__mock.trackReq);
 check('따라가기 요청: 그린 시각·상자·구간', Math.abs(treq.time - 3) < 0.05 && treq.start === 3 && treq.end === 13.5 &&
     Math.abs(treq.rect.x - 0.1) < 0.01, JSON.stringify(treq));
-check('따라간 구간 표시', (await item(1).textContent()).includes('00:03.0 ~ 00:06.0 따라감'), await item(1).textContent());
-check('놓친 곳 안내', (await item(1).textContent()).includes('00:06.0 뒤는 놓쳤습니다'));
+check('따라간 구간 표시', (await item(1).textContent()).includes('00:00.0 ~ 00:03.0 따라감'), await item(1).textContent());
+check('놓친 곳 안내', (await item(1).textContent()).includes('00:03.0 뒤는 놓쳤습니다'));
 check('따라간 가림은 취소 버튼만', (await item(1).getByRole('button', {name: '따라가기 취소'}).count()) === 1 &&
     (await item(1).getByRole('button', {name: '여기서부터'}).count()) === 0);
 check('따라간 구간 띠', (await page.$$('.rect-span')).length === 2);
@@ -331,7 +346,7 @@ await page.waitForSelector('.auto-panel .progress:not([hidden])');
 check('분석 중 다음 잠금', await nextBtn().isDisabled());
 await page.waitForSelector('.auto-toggle:not([hidden])');
 await page.waitForTimeout(200);
-check('분석 요청 구간', await page.evaluate(() => window.__mock.analyzeReq.start === 3 && window.__mock.analyzeReq.end === 13.5));
+check('분석 요청 구간', await page.evaluate(() => JSON.stringify(window.__mock.analyzeReq.segments) === '[{"start":3,"end":13.5}]'));
 check('주황 박스 표시', (await orangeCount()) > 100);
 await shot('3-auto-done');
 await click('얼굴 가리기 끄기');
@@ -421,7 +436,7 @@ check('저장 요청 파일 이름', req.fileName === '교차로 사고 영상',
 check('저장 요청 자동 가림', JSON.stringify(req.auto) === '["face"]', JSON.stringify(req.auto));
 check('저장 요청 무음', req.mute === true, String(req.mute));
 check('저장 요청 뺀 트랙', JSON.stringify(req.exclude) === '{"face":[1]}', JSON.stringify(req.exclude));
-check('저장 요청 구간', req.start === 3 && req.end === 13.5);
+check('저장 요청 구간', JSON.stringify(req.segments) === '[{"start":3,"end":13.5}]', JSON.stringify(req.segments));
 check('사각형 1 비율', near(req.rects[0].x, 0.1) && near(req.rects[0].y, 0.2) && near(req.rects[0].w, 0.3) && near(req.rects[0].h, 0.3), JSON.stringify(req.rects[0]));
 check('사각형 2 비율(역방향 드래그)', near(req.rects[1].x, 0.6) && near(req.rects[1].y, 0.7) && near(req.rects[1].w, 0.3) && near(req.rects[1].h, 0.2), JSON.stringify(req.rects[1]));
 check('사각형 개수', req.rects.length === 2);
@@ -465,7 +480,7 @@ check('구간 늘리면 자동으로 이어서 분석', await nextBtn().isDisabl
 await page.waitForSelector('.auto-panel .progress', {state: 'hidden'});
 await page.waitForTimeout(200);
 const resumeReq = await page.evaluate(() => window.__mock.analyzeReq);
-check('이어서 분석은 fresh 아님', resumeReq.fresh === false && resumeReq.start === 2, JSON.stringify(resumeReq));
+check('이어서 분석은 fresh 아님', resumeReq.fresh === false && resumeReq.segments[0].start === 2, JSON.stringify(resumeReq));
 check('이어서 분석 안내', (await page.textContent('.guide-line')).includes('빼 둔 곳은 그대로'));
 check('늘어난 부분만 한 번 분석', (await page.evaluate(() => window.__mock.analyzeCount)) === countBefore + 1);
 // 꺼 둔 채로 구간을 늘리면 분석하지 않고, 다시 켤 때 이어서 분석
@@ -520,7 +535,7 @@ await page.waitForSelector('.done-card:not([hidden])');
 check('이름 바꾸면 묻지 않고 새 파일로', (await page.evaluate(() => window.__mock.exportReq.overwrite)) === false &&
     (await page.textContent('.done-card')).includes('수정본.mp4'));
 const req2 = await page.evaluate(() => window.__mock.exportReq);
-check('구간 바꾼 뒤에도 뺀 트랙 유지', JSON.stringify(req2.exclude) === '{"face":[1]}' && req2.start === 1, JSON.stringify(req2));
+check('구간 바꾼 뒤에도 뺀 트랙 유지', JSON.stringify(req2.exclude) === '{"face":[1]}' && req2.segments[0].start === 1, JSON.stringify(req2));
 await page.evaluate(() => { window.__mock.exportReq = null; });
 await page.focus('.name-input');
 await page.keyboard.press('Enter');
@@ -537,9 +552,9 @@ await click('여기서 시작');
 await click('다음 ▶');
 await page.waitForTimeout(300);
 check('구간 밖 가림 안내', (await item(0).textContent()).includes('자른 구간 밖'));
-await seekTo(10);
+await seekSrc(10);
 await item(0).getByRole('button', {name: '여기서부터'}).click();
-check('구간 밖 가림도 여기서부터로 되살림', (await item(0).textContent()).includes('00:10.0 ~ 00:13.5'), await item(0).textContent());
+check('구간 밖 가림도 여기서부터로 되살림', (await item(0).textContent()).includes('00:01.0 ~ 00:04.5'), await item(0).textContent());
 await click('◀ 이전');
 await videoReady();
 await seekTo(1);
@@ -547,14 +562,98 @@ await page.waitForTimeout(200);
 await click('여기서 시작');
 await click('다음 ▶');
 await page.waitForTimeout(300);
-await seekTo(5);
+await seekSrc(5);
 await item(0).getByRole('button', {name: '여기서부터'}).click();
-await seekTo(8);
+await seekSrc(8);
 await item(0).getByRole('button', {name: '여기까지'}).click();
-check('2번 가림 5~8초로 되돌림', (await item(0).textContent()).includes('00:05.0 ~ 00:08.0'));
+check('2번 가림 5~8초로 되돌림', (await item(0).textContent()).includes('00:04.0 ~ 00:07.0'), await item(0).textContent());
 await click('다음 ▶');
 await page.waitForSelector('.name-input');
 await page.waitForTimeout(200);
+
+// 여러 구간 이어 붙이기: 넣기·합치기·순서 바꾸기·고치기, 3단계 이어 붙인 시각, 분석·저장 요청 순서
+await click('◀ 이전');
+await click('◀ 이전');
+await videoReady();
+const segTimes = () => page.$$eval('.seg-item .seg-time', (els) => els.map((e) => e.textContent).join(' | '));
+const pick = async (a, b) => {
+    await seekTo(a);
+    await page.waitForTimeout(150);
+    await click('여기서 시작');
+    await seekTo(b);
+    await page.waitForTimeout(150);
+    await click('여기서 끝');
+};
+await pick(2, 5);
+await click('＋ 이 구간 넣기');
+check('구간 넣기 → 목록 1개', (await segTimes()) === '00:02.0 ~ 00:05.0', await segTimes());
+await pick(12, 15);
+check('넣기 전 안내', (await page.textContent('.guide-line')).includes('"이 구간 넣기"를 누르세요'), await page.textContent('.guide-line'));
+await click('＋ 이 구간 넣기');
+await pick(4, 7);
+await click('＋ 이 구간 넣기');
+check('겹치는 구간은 합침', (await segTimes()) === '00:02.0 ~ 00:07.0 | 00:12.0 ~ 00:15.0', await segTimes());
+check('합쳤다는 안내', (await page.textContent('.guide-line')).includes('하나로 합쳤습니다'));
+check('재생 막대 구간 띠 2개', (await page.$$('.seg-band')).length === 2);
+const seg = (i) => page.locator('.seg-item').nth(i);
+await seg(1).getByRole('button', {name: '위로'}).click();
+check('위로 → 순서 바뀜', (await segTimes()) === '00:12.0 ~ 00:15.0 | 00:02.0 ~ 00:07.0', await segTimes());
+check('맨 위 구간 위로 잠김', await seg(0).getByRole('button', {name: '위로'}).isDisabled() &&
+    await seg(1).getByRole('button', {name: '아래로'}).isDisabled());
+await seg(1).getByRole('button', {name: '고치기'}).click();
+check('고치기 → 고친 구간 넣기', (await page.$$('.seg-item.editing')).length === 1 &&
+    (await page.getByRole('button', {name: '고친 구간 넣기', exact: true}).count()) === 1);
+await seekTo(8);
+await page.waitForTimeout(150);
+await click('여기서 끝');
+await click('고친 구간 넣기');
+check('고친 구간은 같은 자리', (await segTimes()) === '00:12.0 ~ 00:15.0 | 00:02.0 ~ 00:08.0', await segTimes());
+await shot('2-segments');
+await click('▶ 이어서 보기');
+await page.waitForTimeout(400);
+check('이어서 보기는 1번 구간부터 재생', await page.evaluate(() => {
+    const v = document.querySelector('video');
+    return !v.paused && v.currentTime >= 12 && v.currentTime < 15;
+}));
+await click('멈춤');
+
+await click('다음 ▶');
+await videoReady();
+await page.waitForTimeout(300);
+check('3단계 길이는 이어 붙인 길이', (await page.textContent('.clock')).endsWith('00:09.0'), await page.textContent('.clock'));
+check('구간 경계 세로선', (await page.$$('.seg-cut')).length === 1);
+check('3단계 처음은 1번 구간 시작', Math.abs((await nowAt()) - 12) < 0.05, String(await nowAt()));
+await seekTo(4);
+await page.waitForTimeout(150);
+check('이어 붙인 4초 → 원본 3초', Math.abs((await nowAt()) - 3) < 0.05, String(await nowAt()));
+await page.waitForSelector('.auto-panel .progress', {state: 'hidden'});
+const segReq = await page.evaluate(() => window.__mock.analyzeReq);
+check('분석 요청은 구간 순서대로', JSON.stringify(segReq.segments) === '[{"start":12,"end":15},{"start":2,"end":8}]', JSON.stringify(segReq));
+check('2번 가림(5~8초)은 이어 붙인 시각', (await item(0).textContent()).includes('00:06.0 ~ 00:09.0'), await item(0).textContent());
+await seekTo(2.7);
+await page.waitForTimeout(150);
+await click('재생');
+await page.waitForFunction(() => document.querySelector('video').currentTime < 12, null, {timeout: 3000}).catch(() => {});
+check('구간 끝에서 다음 구간으로 넘어감', await page.evaluate(() => {
+    const t = document.querySelector('video').currentTime;
+    return t >= 2 && t < 3;
+}), String(await nowAt()));
+await click('멈춤');
+await shot('3-segments');
+
+await click('다음 ▶');
+await page.waitForSelector('.name-input');
+check('저장 요약: 이어 붙인 구간', (await page.textContent('.summary')).includes('2개 구간을 이어 붙임 (모두 9.0초)'));
+check('직접 가린 곳은 가림 수(조각 수 아님)', (await page.textContent('.summary')).includes('2곳'), await page.textContent('.summary'));
+await click('다시 저장하기');
+await page.locator('.modal').getByRole('button', {name: '확인', exact: true}).click();
+await page.waitForSelector('.done-card:not([hidden])');
+const segExport = await page.evaluate(() => window.__mock.exportReq);
+check('저장 요청 구간 순서', JSON.stringify(segExport.segments) === '[{"start":12,"end":15},{"start":2,"end":8}]', JSON.stringify(segExport.segments));
+check('항상 가림은 구간마다, 시간 가림은 그 조각만', segExport.rects.length === 3 &&
+    segExport.rects.some((r) => r.start === 5 && r.end === 8) &&
+    segExport.rects.some((r) => r.start === 12 && r.end === 15) && segExport.rects.some((r) => r.start === 2 && r.end === 8),
+JSON.stringify(segExport.rects.map((r) => [r.start, r.end])));
 
 // 새 영상 편집하기: 확인 창에서 계속 편집하기 → 그대로, 새 영상 편집하기 → 처음으로
 await click('새 영상 편집하기');

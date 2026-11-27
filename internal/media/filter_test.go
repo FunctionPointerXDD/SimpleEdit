@@ -2,6 +2,7 @@ package media
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -69,8 +70,22 @@ func TestExportArgsMute(t *testing.T) {
 	if !slices.Contains(args, "-an") || slices.Contains(args, "aac") || slices.Contains(args, "0:a:0?") {
 		t.Errorf("무음 인자 이상: %v", args)
 	}
-	enc := EncodeArgs(PipeSpec{Source: "in.mp4", Duration: 5, FPS: 30, Width: 64, Height: 64, Mute: true}, "out.mp4")
+	enc := EncodeArgs([]PipeSpec{{Source: "in.mp4", Duration: 5, FPS: 30, Width: 64, Height: 64, Mute: true}}, "out.mp4")
 	if !slices.Contains(enc, "-an") || slices.Contains(enc, "in.mp4") {
 		t.Errorf("무음 파이프는 원본을 입력으로 열지 않아야 함: %v", enc)
+	}
+}
+
+func TestEncodeArgsConcatsAudio(t *testing.T) {
+	parts := []PipeSpec{
+		{Source: "in.mp4", Start: 2, Duration: 1, FPS: 30, Width: 64, Height: 64},
+		{Source: "in.mp4", Start: 10, Duration: 0.5, FPS: 30, Width: 64, Height: 64},
+	}
+	enc := strings.Join(EncodeArgs(parts, "out.mp4"), " ")
+	for _, want := range []string{"-ss 2.000 -t 1.000 -i in.mp4", "-ss 10.000 -t 0.500 -i in.mp4",
+		"[1:a:0]apad,atrim=duration=1.000,asetpts=PTS-STARTPTS[a0];", "[a0][a1]concat=n=2:v=0:a=1[a]", "-map [a]", "-t 1.500"} {
+		if !strings.Contains(enc, want) {
+			t.Errorf("%q 없음: %s", want, enc)
+		}
 	}
 }

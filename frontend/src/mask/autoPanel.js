@@ -6,7 +6,7 @@
 import {h} from '../ui/dom.js';
 import {createProgress} from '../ui/progress.js';
 import * as api from '../api.js';
-import {state, autoCovers} from '../state.js';
+import {state, autoCovers, clipSegments} from '../state.js';
 
 const STAGE_TEXT = {analyze_face: '얼굴을 찾는 중입니다…', analyze_plate: '번호판을 찾는 중입니다…'};
 
@@ -66,7 +66,7 @@ export function createAutoPanel({ctx, guide, player, onChange}) {
         progress.start(`analyze_${kind}`);
         off = api.onProgress(api.EVENTS.analyzeProgress, (p) => progress.update(p));
         try {
-            const result = await api.analyze({kind, start: state.start, end: state.end, fresh});
+            const result = await api.analyze({kind, segments: clipSegments().map((s) => ({start: s.start, end: s.end})), fresh});
             const keep = !fresh && prev;
             state.auto[kind] = {result, enabled: keep ? prev.enabled : true, excluded: keep ? prev.excluded : []};
             if (keep) guide.set(`늘어난 부분까지 ${k.name}을 찾았습니다. 빼 둔 곳은 그대로입니다.`, 'success');

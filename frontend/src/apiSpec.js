@@ -10,7 +10,7 @@ export const EVENTS = /** @type {const} */ ({
 export const MESSAGES = {
     msgAgeLimit: '나이 제한이 있는 영상이라 받을 수 없습니다. 다른 영상 주소를 넣어 주세요.',
     msgAnalyzeFail: '자동으로 찾는 중 문제가 생겼습니다. 다시 눌러 주세요.',
-    msgAutoStale: '자른 구간 일부의 얼굴 찾기가 끝나지 않았습니다. "이전"을 눌러 3단계로 돌아가면 나머지를 이어서 찾습니다.',
+    msgAutoStale: '자른 구간 일부의 자동 찾기가 끝나지 않았습니다. "이전"을 눌러 3단계로 돌아가면 나머지를 이어서 찾습니다.',
     msgBadRange: '끝 지점이 시작 지점보다 앞에 있습니다. "여기서 끝"을 다시 눌러 주세요.',
     msgBadURL: '유튜브 영상 주소가 아닙니다. 유튜브에서 주소를 다시 복사해 칸에 붙여넣은 뒤 "영상 받기"를 눌러 주세요.',
     msgBlocked: '유튜브가 잠시 다운로드를 막았습니다. 몇 분 뒤에 다시 눌러 주세요.',
@@ -33,6 +33,7 @@ export const MESSAGES = {
     msgRecentGone: '받아 둔 영상을 열 수 없습니다. 7일이 지나 지워졌을 수 있으니 유튜브 주소로 다시 받아 주세요.',
     msgRuntimeMiss: '얼굴 찾기에 필요한 Windows 구성 요소(Visual C++ 재배포 가능 패키지)가 없습니다. 설치한 뒤 다시 눌러 주세요.',
     msgTooManyRects: '가릴 곳은 10개까지 정할 수 있습니다. 필요 없는 것을 지워 주세요.',
+    msgTooManySegments: '구간은 10개까지 넣을 수 있습니다. 필요 없는 구간을 지워 주세요.',
     msgTooShort: '자를 구간이 너무 짧습니다. 시작과 끝을 1초 이상 떨어지게 정해 주세요.',
     msgToolMissing: '프로그램 파일 일부가 없습니다. 프로그램 폴더를 처음 받은 그대로 다시 풀어 주세요.',
     msgTrackStale: '움직임을 따라간 가림 정보가 없습니다. 3단계에서 그 가림의 "움직임 따라가기"를 다시 눌러 주세요.',
@@ -42,26 +43,28 @@ export const MESSAGES = {
 /**
  * @typedef {Object} AnalyzeRequest
  * @property {string} kind
- * @property {number} start
- * @property {number} end
+ * @property {Segment[]} segments
  * @property {boolean} fresh
  */
 
 /**
  * @typedef {Object} AutoMask
  * @property {string} kind
- * @property {number} start
- * @property {number} duration
  * @property {number} fps
  * @property {number} found
  * @property {number} tracks
+ * @property {AutoPart[]} parts
+ */
+
+/**
+ * @typedef {Object} AutoPart
+ * @property {number} start
  * @property {[number, number, number, number, number][][]} frames
  */
 
 /**
  * @typedef {Object} ExportRequest
- * @property {number} start
- * @property {number} end
+ * @property {Segment[]} segments
  * @property {MaskRect[]} rects
  * @property {string} fileName
  * @property {string[]} auto
@@ -102,6 +105,12 @@ export const MESSAGES = {
  * @property {number} y
  * @property {number} w
  * @property {number} h
+ */
+
+/**
+ * @typedef {Object} Segment
+ * @property {number} start
+ * @property {number} end
  */
 
 /**

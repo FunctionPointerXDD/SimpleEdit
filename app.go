@@ -1,5 +1,7 @@
 // ExportRequest.Rects는 레터박스를 뺀 영상 영역 기준 0~1 비율 좌표와 원본 기준 켜는 시각(초)이다.
 // 시각은 저장 구간으로 자르고 프레임 번호(round(초×fps))로 바꾼다. 가림이 있으면 Go 파이프로 저장한다.
+// ExportRequest.Segments는 이어 붙일 구간(원본 초)을 저장 순서대로 둔 것이다(최대 maxSegments개).
+// 구간마다 가림을 따로 계산해 인코더 하나에 차례로 넣는다. 가림 없는 구간 하나만 ffmpeg로 바로 자른다.
 // End ≤ Start면 구간 전체로 본다(잘못 와도 덜 가리는 쪽으로 틀리지 않게).
 // ProgressEvent.Remaining은 남은 초이고, 아직 모르면 -1이다.
 // 유튜브 영상 이름은 yt-dlp가 알려 준 제목, 없으면 youtubeName이다. 받은 원본은 7일 보관(appdir.KeepDays).
@@ -51,7 +53,13 @@ const (
 	shutdownWaitMax  = 5 * time.Second
 	progressInterval = 250 * time.Millisecond
 	minClipSeconds   = 1.0
+	maxSegments      = 10
 )
+
+type Segment struct {
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+}
 
 type VideoInfo struct {
 	URL      string  `json:"url"`
@@ -71,8 +79,7 @@ type RecentVideo struct {
 }
 
 type ExportRequest struct {
-	Start     float64          `json:"start"`
-	End       float64          `json:"end"`
+	Segments  []Segment        `json:"segments"`
 	Rects     []media.MaskRect `json:"rects"`
 	FileName  string           `json:"fileName"`
 	Auto      []string         `json:"auto"`
@@ -379,7 +386,7 @@ func (a *App) ChooseOutputFolder() (string, error) {
 	return dir, nil
 }
 
-// 자동 박스가 있으면 프레임 파이프(Go 블러), 없으면 ffmpeg 필터로 저장
+// 구간마다 가림을 계산해 Go 파이프로 이어 저장한다. 가림 없는 구간 하나면 ffmpeg로 바로 자른다.
 func (a *App) Export(req ExportRequest) (string, error) {
 	a.mu.Lock()
 	source, info, outDir := a.source, a.info, a.settings.OutputDirOrDesktop()
@@ -387,22 +394,41 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	if source == "" {
 		return "", userError(msgNoVideo, nil)
 	}
-	start, end, err := clipRange(info, req.Start, req.End)
+	segs, err := clipSegments(info, req.Segments)
 	if err != nil {
 		return "", err
 	}
-	if len(req.Rects) > media.MaxRects {
+	if len(req.Rects) > media.MaxRects*maxSegments {
 		return "", userError(msgTooManyRects, nil)
 	}
 	name, err := appdir.CleanFileName(req.FileName)
 	if err != nil {
 		return "", fileNameError(err)
 	}
-	var auto []automask.AutoLayer
-	if len(req.Auto) > 0 {
-		if auto, err = a.autoFrames(req.Auto, req.Exclude, start, end); err != nil {
-			return "", userError(msgAutoStale, err)
+	a.mu.Lock()
+	paths := maps.Clone(a.paths)
+	a.mu.Unlock()
+	parts := make([]media.PipeSpec, len(segs))
+	fns := make([]media.FrameFunc, len(segs))
+	masked, total := false, 0.0
+	for i, sg := range segs {
+		var auto []automask.AutoLayer
+		if len(req.Auto) > 0 {
+			if auto, err = a.autoFrames(req.Auto, req.Exclude, sg.Start, sg.End); err != nil {
+				return "", userError(msgAutoStale, err)
+			}
 		}
+		manual, err := manualRects(req.Rects, sg.Start, sg.End, info.FPS, paths)
+		if err != nil {
+			return "", userError(msgTrackStale, err)
+		}
+		parts[i] = pipeSpec(source, info, sg.Start, sg.End)
+		parts[i].Mute = req.Mute || !info.HasAudio
+		if auto != nil || len(manual) > 0 {
+			fns[i], masked = automask.BlurFunc(manual, auto), true
+		}
+		total += sg.End - sg.Start
+		applog.Printf("저장 구간 %d: %.2f~%.2f초, 사각형 %+v, 자동 %v", i+1, sg.Start, sg.End, manual, auto != nil)
 	}
 
 	ctx, done, err := a.jobs.Begin(a.ctx)
@@ -411,7 +437,7 @@ func (a *App) Export(req ExportRequest) (string, error) {
 	}
 	defer done()
 
-	if free := appdir.FreeBytes(outDir); free >= 0 && free < estimateSize(info, end-start) {
+	if free := appdir.FreeBytes(outDir); free >= 0 && free < estimateSize(info, total) {
 		return "", userError(msgNoSpace, errors.New("남은 공간 "+strconv.FormatInt(free, 10)))
 	}
 	out, replace := a.exportTarget(outDir, name, req.Overwrite)
@@ -420,25 +446,16 @@ func (a *App) Export(req ExportRequest) (string, error) {
 		write = savingPath(out)
 		os.Remove(write)
 	}
-	a.mu.Lock()
-	paths := maps.Clone(a.paths)
-	a.mu.Unlock()
-	manual, err := manualRects(req.Rects, start, end, info.FPS, paths)
-	if err != nil {
-		return "", userError(msgTrackStale, err)
-	}
-	applog.Printf("저장: %.2f~%.2f초, 사각형 %+v, 자동 %v, 무음 %v, 덮어쓰기 %v → %s", start, end, manual, req.Auto, req.Mute, replace, out)
+	applog.Printf("저장: 구간 %d개 %.2f초, 자동 %v, 무음 %v, 덮어쓰기 %v → %s", len(segs), total, req.Auto, req.Mute, replace, out)
 
 	emit := a.progressEmitter(evExportProgress)
 	emit(0, "export")
 	progress := func(f float64) { emit(f, "export") }
-	if auto != nil || len(manual) > 0 {
-		spec := pipeSpec(source, info, start, end)
-		spec.Mute = req.Mute
-		err = media.ProcessFrames(ctx, spec, write, automask.BlurFunc(manual, auto), progress)
+	if masked || len(segs) > 1 {
+		err = media.ProcessSegments(ctx, parts, write, fns, progress)
 	} else {
 		err = media.Export(ctx, media.ExportSpec{
-			Source: source, Output: write, Start: start, Duration: end - start, Mute: req.Mute,
+			Source: source, Output: write, Start: segs[0].Start, Duration: segs[0].End - segs[0].Start, Mute: req.Mute,
 		}, progress)
 	}
 	if err != nil {

@@ -13,7 +13,7 @@ func appWithFace(frames [][]automask.TrackBox) *App {
 	copy(full, frames)
 	return &App{
 		info: media.Info{FPS: 30, Duration: 10, Width: 64, Height: 64},
-		auto: map[string]*automask.Coverage{kindFace: {FPS: 30, First: 30, Frames: full}},
+		auto: map[string]*automask.Coverage{kindFace: {FPS: 30, Pieces: []automask.Piece{{First: 30, Frames: full}}}},
 	}
 }
 
@@ -66,7 +66,7 @@ func TestAutoFramesLayerPerKind(t *testing.T) {
 	a := appWithFace([][]automask.TrackBox{{{Rect: media.Rect{W: 0.1, H: 0.1}, ID: 1}}})
 	plate := make([][]automask.TrackBox, 60)
 	plate[0] = []automask.TrackBox{{Rect: media.Rect{X: 0.4, W: 0.1, H: 0.05}, ID: 1}}
-	a.auto[kindPlate] = &automask.Coverage{FPS: 30, First: 30, Frames: plate}
+	a.auto[kindPlate] = &automask.Coverage{FPS: 30, Pieces: []automask.Piece{{First: 30, Frames: plate}}}
 	got, err := a.autoFrames([]string{kindFace, kindPlate}, map[string][]int{kindPlate: {2}}, 1, 3)
 	if err != nil {
 		t.Fatal(err)

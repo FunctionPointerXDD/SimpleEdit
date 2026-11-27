@@ -1,16 +1,19 @@
-// AutoMask.Frames 박스는 [x, y, w, h, 트랙 ID], Tracks는 거르고 남긴 트랙 수다.
-// AutoMask는 요청 구간이 아니라 쌓인 분석 범위 전체(Start~Start+Duration)를 준다.
-// AnalyzeRequest.Fresh가 false면 이미 분석한 범위는 다시 쓰고 빠진 앞·뒤만 분석한다.
+// AutoMask.Parts는 쌓인 분석 조각 전체(요청 구간만이 아님)이고, 조각마다 Start초부터 프레임별 박스
+// [x, y, w, h, 트랙 ID]를 둔다. Tracks는 거르고 남긴 트랙 수다.
+// AnalyzeRequest.Segments는 이어 붙일 구간들(원본 초)이다. 구간 사이 빈 곳은 분석하지 않는다.
+// Fresh가 false면 이미 분석한 프레임은 다시 쓰고 빠진 곳만 분석한다.
 // Kind는 face(YuNet, 타원) 또는 plate(YOLOX, 사각형)다. 진행 단계 이름도 종류마다 다르다.
 // 번호판 모델(bin\models\plate_yolox_tiny.onnx)은 CC BY 4.0 데이터로 학습해 출처를 앱과 함께 둔다.
 
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"math"
 	"os"
+	"slices"
 
 	"simpleEdit/internal/applog"
 	"simpleEdit/internal/automask"
@@ -31,39 +34,42 @@ const evAnalyzeProgress = "analyze:progress"
 var errStaleAuto = errors.New("자동 분석이 저장 구간을 덮지 않음")
 
 type AnalyzeRequest struct {
-	Kind  string  `json:"kind"`
-	Start float64 `json:"start"`
-	End   float64 `json:"end"`
-	Fresh bool    `json:"fresh"`
+	Kind     string    `json:"kind"`
+	Segments []Segment `json:"segments"`
+	Fresh    bool      `json:"fresh"`
+}
+
+type AutoPart struct {
+	Start  float64        `json:"start"`
+	Frames [][][5]float32 `json:"frames"`
 }
 
 type AutoMask struct {
-	Kind     string         `json:"kind"`
-	Start    float64        `json:"start"`
-	Duration float64        `json:"duration"`
-	FPS      float64        `json:"fps"`
-	Found    int            `json:"found"`
-	Tracks   int            `json:"tracks"`
-	Frames   [][][5]float32 `json:"frames"`
+	Kind   string     `json:"kind"`
+	FPS    float64    `json:"fps"`
+	Found  int        `json:"found"`
+	Tracks int        `json:"tracks"`
+	Parts  []AutoPart `json:"parts"`
 }
 
-// 좌표를 소수 4자리로 반올림하고 트랙 ID를 다섯째 값으로 붙인다.
+// 조각마다 좌표를 소수 4자리로 반올림하고 트랙 ID를 다섯째 값으로 붙인다.
 func toAutoMask(kind string, c *automask.Coverage) AutoMask {
 	round := func(v float64) float32 { return float32(math.Round(v*1e4) / 1e4) }
-	frames := make([][][5]float32, len(c.Frames))
-	for n, boxes := range c.Frames {
-		frames[n] = make([][5]float32, len(boxes))
-		for i, b := range boxes {
-			frames[n][i] = [5]float32{round(b.Rect.X), round(b.Rect.Y), round(b.Rect.W), round(b.Rect.H), float32(b.ID)}
+	parts := make([]AutoPart, len(c.Pieces))
+	for k, p := range c.Pieces {
+		frames := make([][][5]float32, len(p.Frames))
+		for n, boxes := range p.Frames {
+			frames[n] = make([][5]float32, len(boxes))
+			for i, b := range boxes {
+				frames[n][i] = [5]float32{round(b.Rect.X), round(b.Rect.Y), round(b.Rect.W), round(b.Rect.H), float32(b.ID)}
+			}
 		}
+		parts[k] = AutoPart{Start: float64(p.First) / c.FPS, Frames: frames}
 	}
-	return AutoMask{
-		Kind: kind, Start: float64(c.First) / c.FPS, Duration: float64(len(c.Frames)) / c.FPS, FPS: c.FPS,
-		Found: c.Found, Tracks: c.Kept, Frames: frames,
-	}
+	return AutoMask{Kind: kind, FPS: c.FPS, Found: c.Found, Tracks: c.Kept, Parts: parts}
 }
 
-// 빠진 조각만 차례로 분석해 기존 범위에 붙인다. 빠진 곳이 없으면 바로 준다. 그사이 영상이 바뀌면 버린다.
+// 구간들에서 빠진 조각만 차례로 분석해 기존 조각에 붙인다. 빠진 곳이 없으면 바로 준다. 그사이 영상이 바뀌면 버린다.
 func (a *App) Analyze(req AnalyzeRequest) (AutoMask, error) {
 	name, ok := kindNames[req.Kind]
 	if !ok {
@@ -75,18 +81,27 @@ func (a *App) Analyze(req AnalyzeRequest) (AutoMask, error) {
 	if source == "" {
 		return AutoMask{}, userError(msgNoVideo, nil)
 	}
-	start, end, err := clipRange(info, req.Start, req.End)
+	segs, err := clipSegments(info, req.Segments)
 	if err != nil {
 		return AutoMask{}, err
 	}
 	cov := &automask.Coverage{FPS: info.FPS}
 	if prev != nil && !req.Fresh {
 		c := *prev
+		c.Pieces = slices.Clone(c.Pieces)
 		cov = &c
 	}
-	spans, restart := cov.Missing(automask.FrameSpan{First: automask.FrameAt(start, info.FPS), End: automask.FrameAt(end, info.FPS)})
-	if restart {
-		cov = &automask.Coverage{FPS: info.FPS}
+	var spans []automask.FrameSpan
+	for _, sg := range sortedSegments(segs) {
+		want := automask.FrameSpan{First: automask.FrameAt(sg.Start, info.FPS), End: automask.FrameAt(sg.End, info.FPS)}
+		for _, sp := range cov.Missing(want) {
+			if n := len(spans); n > 0 && spans[n-1].End > sp.First {
+				sp.First = spans[n-1].End
+			}
+			if sp.End > sp.First {
+				spans = append(spans, sp)
+			}
+		}
 	}
 	if len(spans) == 0 {
 		return toAutoMask(req.Kind, cov), nil
@@ -221,6 +236,32 @@ func (a *App) autoFrames(kinds []string, exclude map[string][]int, start, end fl
 		return nil, nil
 	}
 	return layers, nil
+}
+
+// 구간이 1~maxSegments개인지 보고 구간마다 clipRange한다. 순서는 그대로 둔다.
+func clipSegments(info media.Info, segs []Segment) ([]Segment, error) {
+	if len(segs) == 0 {
+		return nil, userError(msgBadRange, errors.New("구간 없음"))
+	}
+	if len(segs) > maxSegments {
+		return nil, userError(msgTooManySegments, nil)
+	}
+	out := make([]Segment, len(segs))
+	for i, sg := range segs {
+		s, e, err := clipRange(info, sg.Start, sg.End)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = Segment{Start: s, End: e}
+	}
+	return out, nil
+}
+
+// 시작 순서로 정렬한 복사본
+func sortedSegments(segs []Segment) []Segment {
+	out := slices.Clone(segs)
+	slices.SortFunc(out, func(a, b Segment) int { return cmp.Compare(a.Start, b.Start) })
+	return out
 }
 
 // 시작은 0, 끝은 영상 길이로 자른 뒤 순서와 최소 길이를 검사한다.
