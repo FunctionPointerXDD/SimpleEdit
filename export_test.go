@@ -92,3 +92,24 @@ func TestManualRectsFollowPath(t *testing.T) {
 		t.Error("없는 추적 번호면 오류")
 	}
 }
+
+func TestClipSegments(t *testing.T) {
+	info := media.Info{Duration: 60, FPS: 30}
+	got, err := clipSegments(info, []Segment{{Start: 40, End: 70}, {Start: -1, End: 5}})
+	if err != nil || len(got) != 2 || got[0] != (Segment{40, 60}) || got[1] != (Segment{0, 5}) {
+		t.Errorf("순서는 그대로, 0~길이로 자름: %+v %v", got, err)
+	}
+	if _, err := clipSegments(info, nil); err == nil {
+		t.Error("구간이 없으면 오류")
+	}
+	if _, err := clipSegments(info, []Segment{{Start: 1, End: 10}, {Start: 20, End: 20.5}}); err == nil {
+		t.Error("1초보다 짧은 구간이 있으면 오류")
+	}
+	many := make([]Segment, maxSegments+1)
+	for i := range many {
+		many[i] = Segment{Start: float64(i * 2), End: float64(i*2 + 1)}
+	}
+	if _, err := clipSegments(info, many); err == nil || err.Error() != msgTooManySegments {
+		t.Errorf("구간이 너무 많으면 안내: %v", err)
+	}
+}

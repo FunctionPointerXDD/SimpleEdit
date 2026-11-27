@@ -12,7 +12,7 @@ import {createMessage} from '../ui/message.js';
 import {createProgress} from '../ui/progress.js';
 import {confirmDialog} from '../ui/modal.js';
 import * as api from '../api.js';
-import {state, resetAll, enabledAuto, autoExclusions, rectsForExport} from '../state.js';
+import {state, resetAll, enabledAuto, autoExclusions, rectsForExport, rectPieces, clipSegments, totalLength} from '../state.js';
 import {formatClock, formatLength} from '../util/time.js';
 
 const STAGE_TEXT = {export: '영상을 저장하는 중입니다…'};
@@ -44,14 +44,18 @@ export const saveStep = {
             onkeydown: (e) => { if (e.key === 'Enter' && !state.savedPath && !saveBtn.disabled) save(); },
         });
         const done = h('div.done-card', {hidden: true});
-        const len = state.end - state.start;
-        const manualCount = rectsForExport().length;
+        const segs = clipSegments().map((s) => ({start: s.start, end: s.end}));
+        const len = totalLength();
+        const clipText = segs.length === 1
+            ? `${formatClock(segs[0].start)} ~ ${formatClock(segs[0].end)} (${formatLength(len)})`
+            : `${segs.length}개 구간을 이어 붙임 (모두 ${formatLength(len)})`;
+        const manualCount = state.rects.filter((r) => rectPieces(r).length).length;
 
         root.append(
             h('section.panel', {},
                 h('h1', {}, '영상을 저장합니다'),
                 h('dl.summary', {},
-                    h('dt', {}, '자른 구간'), h('dd', {}, `${formatClock(state.start)} ~ ${formatClock(state.end)} (${formatLength(len)})`),
+                    h('dt', {}, '자른 구간'), h('dd', {}, clipText),
                     h('dt', {}, '자동 가림'), h('dd', {}, autoSummary()),
                     h('dt', {}, '소리'), h('dd', {}, state.mute ? '없앰' : '그대로'),
                     h('dt', {}, '직접 가린 곳'), h('dd', {}, manualCount ? `${manualCount}곳` : '없음'),
@@ -88,7 +92,7 @@ export const saveStep = {
 
         function content() {
             return {
-                start: state.start, end: state.end, rects: rectsForExport(),
+                segments: segs, rects: rectsForExport(),
                 auto: enabledAuto(), mute: state.mute, exclude: autoExclusions(),
             };
         }

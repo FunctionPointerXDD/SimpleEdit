@@ -1,9 +1,22 @@
 export namespace main {
 	
-	export class AnalyzeRequest {
-	    kind: string;
+	export class Segment {
 	    start: number;
 	    end: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Segment(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.start = source["start"];
+	        this.end = source["end"];
+	    }
+	}
+	export class AnalyzeRequest {
+	    kind: string;
+	    segments: Segment[];
 	    fresh: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -13,19 +26,48 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
-	        this.start = source["start"];
-	        this.end = source["end"];
+	        this.segments = this.convertValues(source["segments"], Segment);
 	        this.fresh = source["fresh"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AutoPart {
+	    start: number;
+	    frames: number[][][];
+	
+	    static createFrom(source: any = {}) {
+	        return new AutoPart(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.start = source["start"];
+	        this.frames = source["frames"];
 	    }
 	}
 	export class AutoMask {
 	    kind: string;
-	    start: number;
-	    duration: number;
 	    fps: number;
 	    found: number;
 	    tracks: number;
-	    frames: number[][][];
+	    parts: AutoPart[];
 	
 	    static createFrom(source: any = {}) {
 	        return new AutoMask(source);
@@ -34,17 +76,33 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
-	        this.start = source["start"];
-	        this.duration = source["duration"];
 	        this.fps = source["fps"];
 	        this.found = source["found"];
 	        this.tracks = source["tracks"];
-	        this.frames = source["frames"];
+	        this.parts = this.convertValues(source["parts"], AutoPart);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
+	
 	export class ExportRequest {
-	    start: number;
-	    end: number;
+	    segments: Segment[];
 	    rects: media.MaskRect[];
 	    fileName: string;
 	    auto: string[];
@@ -58,8 +116,7 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.start = source["start"];
-	        this.end = source["end"];
+	        this.segments = this.convertValues(source["segments"], Segment);
 	        this.rects = this.convertValues(source["rects"], media.MaskRect);
 	        this.fileName = source["fileName"];
 	        this.auto = source["auto"];
@@ -104,6 +161,7 @@ export namespace main {
 	        this.savedAt = source["savedAt"];
 	    }
 	}
+	
 	export class TrackRequest {
 	    time: number;
 	    start: number;

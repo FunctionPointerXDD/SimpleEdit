@@ -276,6 +276,38 @@ b { color: var(--primary-dark); }
 .mark-card .value { font-size: 26px; font-weight: bold; font-variant-numeric: tabular-nums; }
 .mark-card .link { min-height: 28px; padding: 0; }
 
+/* ── 2단계: 이어 붙일 구간 ─────────────────────── */
+.side.seg-side { width: 250px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.trim-editor .player-controls { gap: 8px; }
+.trim-editor .player-controls .btn.small { padding: 0 11px; }
+.trim-editor .btn.play { min-width: 110px; }
+.trim-editor .btn.mark { min-width: 160px; }
+.trim-editor .mark-card .value { font-size: 24px; }
+.seg-side .seg-title { margin: 0; }
+.seg-side .hint { margin: 0; }
+.btn.add-seg, .btn.play-all { width: 100%; }
+.seg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; overflow: auto; }
+.seg-list li.empty { color: var(--muted); font-size: 18px; }
+.seg-item {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px 8px;
+    padding: 8px 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums;
+}
+.seg-item.editing { background: #fffbeb; outline: 2px solid var(--end); border-radius: 6px; }
+.seg-info { display: flex; flex-direction: column; font-size: 18px; line-height: 1.25; }
+.seg-len { color: var(--muted); font-size: 16px; }
+.seg-move { display: flex; flex-direction: column; gap: 4px; }
+.seg-move .btn.small { min-height: 36px; padding: 0 8px; font-size: 16px; }
+.seg-actions { grid-column: 1 / -1; display: flex; gap: 6px; }
+.seg-actions .btn.small { flex: 1; min-height: 44px; padding: 0 6px; font-size: 18px; }
+.seg-bands, .seg-cuts { position: absolute; inset: 0; }
+.seg-band {
+    position: absolute; top: -6px; height: 14px; border-radius: 4px;
+    background: rgba(37, 99, 235, 0.8); color: #fff; font-size: 12px; font-weight: bold; line-height: 14px; padding-left: 4px;
+    overflow: hidden; white-space: nowrap;
+}
+.seg-band.editing { background: var(--end); }
+.seg-cut { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1px; background: var(--text); border-radius: 2px; }
+
 /* ── 3단계: 가릴 곳 목록 ──────────────────────── */
 .side { width: 280px; flex-shrink: 0; overflow: auto; }
 .side .hint { color: var(--muted); font-size: 18px; margin: 0 0 12px; }

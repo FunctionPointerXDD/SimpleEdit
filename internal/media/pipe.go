@@ -1,6 +1,10 @@
 // FrameFunc는 n번째 프레임을 제자리에서 고친다. 반환 뒤 버퍼는 다시 쓰인다.
 // 분석(DecodeFrames)은 bgr24, 저장(ProcessFrames)은 yuv420p로 주고받는다. 저장 쪽은 원본·출력이
 // 모두 yuv420p라 bgr24를 거치면 색 변환만 두 번 늘어난다(2026-09-30: 1080p 60초 저장 21.5→15.0초).
+// 여러 구간을 이어 붙일 때(ProcessSegments)는 구간마다 디코더를 차례로 열어 인코더 하나에 넣는다.
+// 구간마다 정확히 FrameCount장을 넣고(모자라면 마지막 장 반복, 넘치면 버림) 소리도 구간마다
+// FrameCount/fps초로 맞춰(모자라면 무음으로 채움) concat으로 이어, 영상과 소리가 어긋나지 않는다.
+// 소리가 없는 원본은 Mute로 불러야 한다(concat 필터는 없는 소리 입력을 건너뛰지 못함).
 
 package media
 
@@ -12,6 +16,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	"simpleEdit/internal/frame"
 	"simpleEdit/internal/tools"
@@ -56,8 +61,9 @@ func DecodeArgs(s PipeSpec, format frame.Format) []string {
 	}
 }
 
-// stdin yuv420p 원시 프레임을 H.264로 인코딩하고, 무음이 아니면 원본 구간 소리를 붙인다.
-func EncodeArgs(s PipeSpec, output string) []string {
+// stdin yuv420p 원시 프레임을 H.264로 인코딩하고, 무음이 아니면 구간마다 원본 소리를 이어 붙인다.
+func EncodeArgs(parts []PipeSpec, output string) []string {
+	s := parts[0]
 	w, h := s.evenSize()
 	args := []string{
 		"-hide_banner", "-nostdin", "-loglevel", "error", "-y",
@@ -66,19 +72,37 @@ func EncodeArgs(s PipeSpec, output string) []string {
 		"-framerate", rate(s.FPS),
 		"-i", "pipe:0",
 	}
-	if !s.Mute {
-		args = append(args, "-ss", secs(s.Start), "-t", secs(s.Duration), "-i", s.Source)
+	total := 0.0
+	for _, p := range parts {
+		total += p.frameSeconds()
+		if !s.Mute {
+			args = append(args, "-ss", secs(p.Start), "-t", secs(p.frameSeconds()), "-i", p.Source)
+		}
 	}
 	args = append(args, "-map", "0:v:0")
-	args = append(args, audioArgs(s.Mute, 1)...)
+	switch {
+	case s.Mute || len(parts) == 1:
+		args = append(args, audioArgs(s.Mute, 1)...)
+	default:
+		var graph, labels strings.Builder
+		for i, p := range parts {
+			fmt.Fprintf(&graph, "[%d:a:0]apad,atrim=duration=%s,asetpts=PTS-STARTPTS[a%d];", i+1, secs(p.frameSeconds()), i)
+			fmt.Fprintf(&labels, "[a%d]", i)
+		}
+		args = append(args, "-filter_complex", fmt.Sprintf("%s%sconcat=n=%d:v=0:a=1[a]", graph.String(), labels.String(), len(parts)),
+			"-map", "[a]", "-c:a", "aac", "-b:a", "160k")
+	}
 	return append(args,
-		"-t", secs(s.Duration),
+		"-t", secs(total),
 		"-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
 		"-pix_fmt", "yuv420p",
 		"-movflags", "+faststart",
 		output,
 	)
 }
+
+// FrameCount장의 길이(초)
+func (s PipeSpec) frameSeconds() float64 { return float64(s.FrameCount()) / s.FPS }
 
 func pixFmt(f frame.Format) string {
 	if f == frame.YUV420 {
@@ -89,11 +113,19 @@ func pixFmt(f frame.Format) string {
 
 func rate(fps float64) string { return strconv.FormatFloat(fps, 'f', 6, 64) }
 
-// 디코딩 → fn → 인코더 stdin. 실패하면 인코더를 멈추고 output을 지운다.
-func ProcessFrames(parent context.Context, s PipeSpec, output string, fn FrameFunc, onProgress ProgressFunc) (err error) {
+// 한 구간만 ProcessSegments
+func ProcessFrames(parent context.Context, s PipeSpec, output string, fn FrameFunc, onProgress ProgressFunc) error {
+	return ProcessSegments(parent, []PipeSpec{s}, output, []FrameFunc{fn}, onProgress)
+}
+
+// 구간마다 디코딩 → fns[i](nil이면 그대로) → 인코더 stdin. 실패하면 인코더를 멈추고 output을 지운다.
+func ProcessSegments(parent context.Context, parts []PipeSpec, output string, fns []FrameFunc, onProgress ProgressFunc) (err error) {
+	if len(parts) == 0 || len(parts) != len(fns) {
+		return errors.New("저장할 구간 없음")
+	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	enc := tools.Command(ctx, tools.FFmpeg, EncodeArgs(s, output)...)
+	enc := tools.Command(ctx, tools.FFmpeg, EncodeArgs(parts, output)...)
 	encIn, err := enc.StdinPipe()
 	if err != nil {
 		return err
@@ -114,24 +146,27 @@ func ProcessFrames(parent context.Context, s PipeSpec, output string, fn FrameFu
 		}
 	}()
 
-	total := s.FrameCount()
-	err = decodeFrames(ctx, s, frame.YUV420, func(n int, f frame.Frame) error {
-		if err := fn(n, f); err != nil {
-			return err
-		}
+	total, written := 0, 0
+	for _, p := range parts {
+		total += p.FrameCount()
+	}
+	write := func(f frame.Frame) error {
 		if _, err := encIn.Write(f.Pix); err != nil {
 			return fmt.Errorf("인코더 쓰기: %w", err)
 		}
+		written++
 		if onProgress != nil {
-			onProgress(min(0.999, float64(n+1)/float64(total)))
+			onProgress(min(0.999, float64(written)/float64(total)))
 		}
 		return nil
-	})
-	if err != nil {
-		cancel()
-		encIn.Close()
-		enc.Wait()
-		return err
+	}
+	for i, p := range parts {
+		if err = encodePart(ctx, p, fns[i], write); err != nil {
+			cancel()
+			encIn.Close()
+			enc.Wait()
+			return err
+		}
 	}
 	encIn.Close()
 	if err := enc.Wait(); err != nil {
@@ -139,6 +174,45 @@ func ProcessFrames(parent context.Context, s PipeSpec, output string, fn FrameFu
 	}
 	if onProgress != nil {
 		onProgress(1)
+	}
+	return nil
+}
+
+var errPartFull = errors.New("구간 프레임 다 참")
+
+// p를 디코딩해 fn을 거쳐 write에 FrameCount장을 넘긴다. 모자라면 마지막 장을 반복한다.
+func encodePart(ctx context.Context, p PipeSpec, fn FrameFunc, write func(frame.Frame) error) error {
+	want, n := p.FrameCount(), 0
+	var last []byte
+	err := decodeFrames(ctx, p, frame.YUV420, func(i int, f frame.Frame) error {
+		if fn != nil {
+			if err := fn(i, f); err != nil {
+				return err
+			}
+		}
+		if err := write(f); err != nil {
+			return err
+		}
+		n++
+		if n >= want {
+			return errPartFull
+		}
+		last = append(last[:0], f.Pix...)
+		return nil
+	})
+	if errors.Is(err, errPartFull) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	w, h := p.evenSize()
+	pad := frame.NewYUV(w, h)
+	copy(pad.Pix, last)
+	for ; n < want; n++ {
+		if err := write(pad); err != nil {
+			return err
+		}
 	}
 	return nil
 }
